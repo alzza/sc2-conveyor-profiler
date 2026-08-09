@@ -232,6 +232,27 @@
     background: var(--line);
     border-bottom: 1px solid var(--line);
   }
+  .creep-guide-head {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 7px 11px;
+    background: #0b141b;
+    color: var(--cyan);
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+  .creep-source {
+    color: var(--amber);
+    border: 1px solid #735f24;
+    background: #2b230d;
+    border-radius: 999px;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
   .creep-guide-item {
     min-width: 0;
     padding: 9px 11px;
@@ -257,6 +278,19 @@
     line-height: 1.5;
   }
   .creep-guide-flow b { color: var(--cyan); }
+  .creep-calculation {
+    grid-column: 1 / -1;
+    padding: 8px 11px;
+    background: #0c161d;
+    border-top: 1px solid #22313c;
+    color: #c6d5df;
+    font: 700 0.78rem/1.65 ui-monospace, Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
+  .calc-name { color: var(--cyan); }
+  .calc-input { color: var(--amber); }
+  .calc-result { color: var(--green); }
+  .calc-error { color: var(--red); }
 
   .chain-box {
     height: 88px;
@@ -1144,7 +1178,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.1.0</span>
+      <span>v1.1.1</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1208,6 +1242,10 @@
       </div>
       <div class="logic-warning" id="logicWarning"></div>
       <div class="creep-guide" aria-label="START CREEP 기준값과 실제 CREEP 진입의 차이">
+        <div class="creep-guide-head">
+          <span>우측 현재 CONVEYOR PROFILING 값으로 즉시 재계산</span>
+          <span class="creep-source" id="creepValueSource">캡처값 기준</span>
+        </div>
         <div class="creep-guide-item">
           <strong class="formula" id="creepFormulaTitle">START CREEP COUNT · 감속식 기준값</strong>
           CSM 감속선의 거리와 기울기를 계산하는 기준 count입니다. 이 count에 도착했다는 이유만으로 CREEP 상태가 시작되지는 않습니다.
@@ -1216,6 +1254,7 @@
           <strong class="actual" id="creepActualTitle">실제 CREEP 진입 · MIN 도달 위치</strong>
           계산된 감속 지령이 INDEX SPEED MIN에 도달하는 위치입니다. 여기부터 MIN 지령으로 INDEX 센서 OFF 지점까지 이동합니다.
         </div>
+        <div class="creep-calculation" id="creepCalculation">현재 프로파일링 값을 계산 중입니다.</div>
         <div class="creep-guide-flow" id="creepGuideFlow">현재 값의 진행 순서를 계산 중입니다.</div>
       </div>
 
@@ -1560,6 +1599,10 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
+      <b>v1.1.1 · 2026-08-10</b>
+      <p>우측 현재 프로파일링 값과 CREEP·INDEX OFF 계산을 실시간 연결하고, 입력값은 노란색 [숫자], 계산 결과는 초록색 [숫자]로 구분했습니다.</p>
+    </article>
+    <article>
       <b>v1.1.0 · 2026-08-10</b>
       <p>iOS·Android 모바일 실행 최적화, 터치 십자선과 HMI 탭 도움말, 대용량 CSV 분할 분석, START CREEP 기준선과 실제 CREEP 진입 설명을 추가했습니다.</p>
     </article>
@@ -1742,6 +1785,7 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   tab: "basic",
+  profileSource: "캡처값 기준",
   problems: new Set(),
   temp: "normal",
   oilTempC: NaN,
@@ -1910,6 +1954,11 @@ function evalAt(pos, p, profileLogic) {
 }
 
 function updateLogicSummary(p, logic) {
+  const bracket = (value, digits = 0) => Number.isFinite(value)
+    ? `[${Number(value).toLocaleString("ko-KR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}]`
+    : "[계산 불가]";
+  const input = (value, digits = 0) => `<span class="calc-input">${bracket(value, digits)}</span>`;
+  const result = (value, digits = 0) => `<span class="calc-result">${bracket(value, digits)}</span>`;
   const countText = (value) => Number.isFinite(value) ? `${Math.round(value).toLocaleString()} counts` : "계산 불가";
   $("logicAccelEnd").textContent = countText(logic.accelEnd);
   $("logicDecelStart").textContent = `>${Math.round(logic.decelStart).toLocaleString()} counts`;
@@ -1920,10 +1969,16 @@ function updateLogicSummary(p, logic) {
   const warning = $("logicWarning");
   warning.textContent = logic.warnings.length ? `파라미터 관계 확인: ${logic.warnings.join(" / ")}` : "";
   warning.classList.toggle("show", logic.warnings.length > 0);
-  $("creepFormulaTitle").textContent = `START CREEP COUNT ${Math.round(p.startCreep).toLocaleString()} · 감속식 기준값 (전환 아님)`;
-  $("creepActualTitle").textContent = logic.hasCreepBeforeIndex
-    ? `실제 CREEP 진입 ≈${Math.round(logic.creepEnter).toLocaleString()} · MIN ${p.vmin.toFixed(2)} V 도달`
-    : `실제 CREEP 진입 없음 · MIN 도달 전에 INDEX 전환`;
+  $("creepValueSource").textContent = state.profileSource;
+  $("creepFormulaTitle").innerHTML = `<span class="calc-name">START CREEP COUNT</span> <span class="calc-input">${bracket(p.startCreep)}</span> · 감속식 기준값 (전환 아님)`;
+  $("creepActualTitle").innerHTML = logic.hasCreepBeforeIndex
+    ? `<span class="calc-name">실제 CREEP 진입</span> <span class="calc-result">${bracket(Math.round(logic.creepEnter))}</span> counts · MIN <span class="calc-input">${bracket(p.vmin, 2)}</span> V 도달`
+    : `<span class="calc-error">실제 CREEP 진입 없음 · MIN 도달 전에 INDEX 전환</span>`;
+  const creepEquation = logic.hasCreepBeforeIndex
+    ? `<span class="calc-name">실제 CREEP 진입</span> = ${input(p.startDecel)} + (${input(p.startCreep)} − ${input(p.startDecel)}) × (${input(p.vmin, 2)} − ${input(p.vmax, 2)}) ÷ ${input(p.decelSlope, 2)} = ${result(Math.round(logic.creepEnter))} counts`
+    : `<span class="calc-error">CREEP 진입 계산 불가 · 위 파라미터 관계 경고를 확인하십시오.</span>`;
+  const stopEquation = `<span class="calc-name">INDEX OFF</span> = ${input(p.indexPos)} − ${input(p.indexWidth)} ÷ 2 = ${result(Math.round(logic.stopPos))} counts`;
+  $("creepCalculation").innerHTML = `${creepEquation}<br>${stopEquation}`;
   const steps = [
     { pos: logic.decelStart, label: "DECEL 시작" },
     { pos: p.startCreep, label: "START CREEP 식 기준선" },
@@ -1931,9 +1986,12 @@ function updateLogicSummary(p, logic) {
   ];
   if (logic.hasCreepBeforeIndex) steps.push({ pos: logic.creepEnter, label: "실제 CREEP 진입" });
   steps.sort((a, b) => a.pos - b.pos);
-  const order = steps.map((step) => `${step.label} ${Math.round(step.pos).toLocaleString()}`).join(" → ");
+  const order = steps.map((step) => `<span class="calc-name">${step.label}</span> <span class="calc-result">[${Math.round(step.pos).toLocaleString()}]</span>`).join(" → ");
+  const difference = Math.round(Math.abs(p.startCreep - logic.creepEnter));
   const relation = logic.hasCreepBeforeIndex
-    ? `현재 설정에서는 실제 CREEP 진입이 START CREEP 기준선보다 ${Math.round(Math.abs(p.startCreep - logic.creepEnter)).toLocaleString()} counts ${logic.creepEnter < p.startCreep ? "먼저" : "나중에"} 발생합니다.`
+    ? difference === 0
+      ? `현재 설정에서는 실제 CREEP 진입과 START CREEP 기준선이 <span class="calc-result">같은 위치 [${Math.round(logic.creepEnter).toLocaleString()}]</span>에서 발생합니다.`
+      : `현재 설정에서는 실제 CREEP 진입이 START CREEP 기준선보다 <span class="calc-result">[${difference.toLocaleString()}]</span> counts ${logic.creepEnter < p.startCreep ? "먼저" : "나중에"} 발생합니다.`
     : "현재 설정에서는 INDEX가 먼저 전환되므로 계산상 CREEP 유지구간이 없습니다.";
   $("creepGuideFlow").innerHTML = `<b>현재 진행 순서:</b> ${order}<br>${relation}`;
 }
@@ -3156,6 +3214,7 @@ $("btnCapture").onclick = () => {
   });
   stopCycle(true);
   state.rec = null;
+  state.profileSource = "캡처값 기준";
   $("recBox").classList.remove("show");
   $("btnApplyRec").disabled = true;
   drawGraph();
@@ -3165,6 +3224,7 @@ $("btnTune").onclick = () => recommend();
 $("btnApplyRec").onclick = () => {
   if (!state.rec) return;
   writeP(state.rec);
+  state.profileSource = "추천 시험값 적용 기준";
   state.rec = null;
   $("recBox").classList.remove("show");
   $("btnApplyRec").disabled = true;
@@ -3278,6 +3338,7 @@ for (const setType of ["A", "B"]) {
 // live update on any input
 document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el) => {
   el.addEventListener("input", () => {
+    state.profileSource = "직접 입력값 기준";
     state.rec = null;
     $("recBox").classList.remove("show");
     $("btnApplyRec").disabled = true;
