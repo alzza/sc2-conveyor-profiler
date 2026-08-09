@@ -202,6 +202,38 @@
   .logic-point strong.warn { color: var(--amber); }
   .logic-warning { display: none; padding: 7px 11px; background: #2b200d; border-bottom: 1px solid #6d531f; color: var(--amber); font-size: 0.78rem; line-height: 1.5; }
   .logic-warning.show { display: block; }
+  .creep-guide {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .creep-guide-item {
+    min-width: 0;
+    padding: 9px 11px;
+    background: #0f171e;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .creep-guide-item strong {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--text);
+    font-size: 0.84rem;
+  }
+  .creep-guide-item strong.formula { color: #7fdbff; }
+  .creep-guide-item strong.actual { color: #36d4e8; }
+  .creep-guide-flow {
+    grid-column: 1 / -1;
+    padding: 7px 11px;
+    background: #101b22;
+    color: #c6d5df;
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  .creep-guide-flow b { color: var(--cyan); }
 
   .chain-box {
     height: 88px;
@@ -940,6 +972,12 @@
       white-space: normal;
       overflow: visible;
     }
+    .creep-guide { grid-template-columns: 1fr; }
+    .creep-guide-flow { grid-column: auto; }
+    .creep-guide-item, .creep-guide-flow {
+      padding: 9px;
+      font-size: 0.8rem;
+    }
     .chain-box { height: 74px; }
     .graph-box {
       flex: none;
@@ -1120,11 +1158,22 @@
       <div class="logic-strip" aria-label="현재 파라미터의 실제 전환 위치">
         <div class="logic-point"><span>MAX 도달 예상</span><strong id="logicAccelEnd">계산 중</strong></div>
         <div class="logic-point"><span>DECEL 진입 조건</span><strong id="logicDecelStart">계산 중</strong></div>
-        <div class="logic-point"><span>CREEP 진입 예상</span><strong id="logicCreepEnter">계산 중</strong></div>
+        <div class="logic-point"><span>실제 CREEP 진입 · MIN 도달</span><strong id="logicCreepEnter">계산 중</strong></div>
         <div class="logic-point"><span>INDEX OFF · 지령 0</span><strong id="logicStopPos">계산 중</strong></div>
         <div class="logic-point"><span>CREEP 이동 예상</span><strong id="logicCreepTravel">계산 중</strong></div>
       </div>
       <div class="logic-warning" id="logicWarning"></div>
+      <div class="creep-guide" aria-label="START CREEP 기준값과 실제 CREEP 진입의 차이">
+        <div class="creep-guide-item">
+          <strong class="formula" id="creepFormulaTitle">START CREEP COUNT · 감속식 기준값</strong>
+          CSM 감속선의 거리와 기울기를 계산하는 기준 count입니다. 이 count에 도착했다는 이유만으로 CREEP 상태가 시작되지는 않습니다.
+        </div>
+        <div class="creep-guide-item">
+          <strong class="actual" id="creepActualTitle">실제 CREEP 진입 · MIN 도달 위치</strong>
+          계산된 감속 지령이 INDEX SPEED MIN에 도달하는 위치입니다. 여기부터 MIN 지령으로 INDEX 센서 OFF 지점까지 이동합니다.
+        </div>
+        <div class="creep-guide-flow" id="creepGuideFlow">현재 값의 진행 순서를 계산 중입니다.</div>
+      </div>
 
       <div class="chain-box">
         <div class="chain-label">체인 위치 시뮬 (encoder counts → 화면 이동)</div>
@@ -1510,7 +1559,7 @@ const CAPTURE = {
 /** Operator hover texts (HMI names kept) */
 const TIPS = {
   START_CREEP_COUNT: {
-    basic: "자동 sheet 이송의 DECEL 계산에 쓰는 기준 count입니다. 이름과 달리 이 count에서 CREEP 상태로 바뀌지 않습니다.\n• 값을 낮춤 → 같은 DECEL SLOPE가 더 짧은 거리 안에 적용되어 지령이 빨리 낮아지고 CREEP 진입이 앞당겨짐\n• 값을 높임 → 지령이 천천히 낮아져 CREEP 진입이 늦어짐\n실제 CREEP 진입은 지령이 INDEX SPEED MIN 아래로 내려갈 때이며, 최종 정지는 INDEX 센서 OFF일 때입니다. Homing에는 사용되지 않습니다.",
+    basic: "START CREEP COUNT는 이름과 달리 CREEP 상태를 직접 시작시키는 위치가 아닙니다. START DECEL부터 이 값까지의 거리를 분모로 사용해 감속 지령선을 계산하는 기준 count입니다.\n• 실제 CREEP 진입 → 계산된 감속 지령이 INDEX SPEED MIN에 도달하는 위치\n• 값을 낮춤 → 같은 DECEL SLOPE가 짧은 거리에 적용되어 MIN 도달과 실제 CREEP 진입이 앞당겨짐\n• 값을 높임 → 감속선이 완만해져 MIN 도달과 실제 CREEP 진입이 늦어짐\n현재 기본값에서는 실제 CREEP 진입이 START CREEP COUNT 기준선보다 먼저 발생합니다. 최종 정지는 INDEX 센서 OFF이며 Homing에는 사용되지 않습니다.",
   },
   START_DECEL_COUNTS: {
     basic: "자동 sheet 이송 중 엔코더 count가 이 값보다 커지면 FULL에서 DECEL로 바뀝니다. 여기서 말하는 ‘늦게 멈춤’은 Homing이 아니라, 자동 이송의 INDEX 센서 OFF 정지점을 지난 뒤 sheet·엔코더가 진행방향으로 더 움직이는 현상입니다.\n• 값을 낮춤 → INDEX 센서에 도달하기 전 더 일찍, 더 완만하게 감속 시작\n• 값을 높임 → 고속구간이 길어지고 감속 시작이 INDEX 센서 쪽으로 늦어짐\n이 값은 정지 명령 위치가 아닙니다. 최종 지령 0 조건은 INDEX 센서 OFF이며 Homing에는 사용되지 않습니다.",
@@ -1815,6 +1864,22 @@ function updateLogicSummary(p, logic) {
   const warning = $("logicWarning");
   warning.textContent = logic.warnings.length ? `파라미터 관계 확인: ${logic.warnings.join(" / ")}` : "";
   warning.classList.toggle("show", logic.warnings.length > 0);
+  $("creepFormulaTitle").textContent = `START CREEP COUNT ${Math.round(p.startCreep).toLocaleString()} · 감속식 기준값 (전환 아님)`;
+  $("creepActualTitle").textContent = logic.hasCreepBeforeIndex
+    ? `실제 CREEP 진입 ≈${Math.round(logic.creepEnter).toLocaleString()} · MIN ${p.vmin.toFixed(2)} V 도달`
+    : `실제 CREEP 진입 없음 · MIN 도달 전에 INDEX 전환`;
+  const steps = [
+    { pos: logic.decelStart, label: "DECEL 시작" },
+    { pos: p.startCreep, label: "START CREEP 식 기준선" },
+    { pos: logic.stopPos, label: "INDEX OFF · STOP" },
+  ];
+  if (logic.hasCreepBeforeIndex) steps.push({ pos: logic.creepEnter, label: "실제 CREEP 진입" });
+  steps.sort((a, b) => a.pos - b.pos);
+  const order = steps.map((step) => `${step.label} ${Math.round(step.pos).toLocaleString()}`).join(" → ");
+  const relation = logic.hasCreepBeforeIndex
+    ? `현재 설정에서는 실제 CREEP 진입이 START CREEP 기준선보다 ${Math.round(Math.abs(p.startCreep - logic.creepEnter)).toLocaleString()} counts ${logic.creepEnter < p.startCreep ? "먼저" : "나중에"} 발생합니다.`
+    : "현재 설정에서는 INDEX가 먼저 전환되므로 계산상 CREEP 유지구간이 없습니다.";
+  $("creepGuideFlow").innerHTML = `<b>현재 진행 순서:</b> ${order}<br>${relation}`;
 }
 
 function buildProfile(p, n = 900, profileLogic) {
@@ -1914,8 +1979,8 @@ function drawGraph() {
     ctx.fillText(lab, Math.min(xp + 3, pad.l + W - 70), pad.t + 10 + (yo || 0));
   }
   vline(p.startDecel, "#ff6b7a", "START DECEL", 0);
-  vline(p.startCreep, "#7fdbff", "START CREEP (식 기준)", 17);
-  if (logic.hasCreepBeforeIndex) vline(logic.creepEnter, "#36b9c9", "CREEP 진입 ≈", 34);
+  vline(p.startCreep, "#7fdbff", "START CREEP 기준선 (전환 아님)", 17);
+  if (logic.hasCreepBeforeIndex) vline(logic.creepEnter, "#36b9c9", "실제 CREEP 진입 (MIN 도달)", 34);
   vline(logic.stopPos, "#c792ea", "INDEX OFF · STOP", logic.hasCreepBeforeIndex ? 51 : 34);
 
   // profile line
