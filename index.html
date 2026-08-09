@@ -1,0 +1,3198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#080d12" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="SC2 Profiler" />
+<title>SC2 CONVEYOR PROFILING Simulator</title>
+<style>
+  :root {
+    --bg: #0b1015;
+    --panel: #121a22;
+    --hmi-bg: #0c1218;
+    --hmi-panel: #111a20;
+    --hmi-box: #050a08;
+    --hmi-green: #61ff89;
+    --hmi-label: #78aefc;
+    --hmi-border: #344552;
+    --line: #26333e;
+    --text: #edf4f8;
+    --muted: #91a2af;
+    --blue: #4aa3ff;
+    --green: #3dd68c;
+    --amber: #f5c042;
+    --red: #ff6b7a;
+    --purple: #c792ea;
+    --cyan: #7fdbff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Segoe UI", "Noto Sans KR", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+  .js-required {
+    padding: 10px 14px;
+    border-bottom: 1px solid #765623;
+    background: #2b200d;
+    color: #f4cf75;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    text-align: center;
+  }
+  body.js-ready .js-required { display: none; }
+  button { font-family: inherit; cursor: pointer; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; }
+
+  /* Top bar */
+  .app-bar {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    background: #080d12;
+    gap: 12px;
+  }
+  .app-bar h1 {
+    margin: 0;
+    font-size: 1.08rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .app-bar .sub {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-left: 8px;
+    display: none;
+  }
+  @media (min-width: 1100px) {
+    .app-bar .sub { display: inline; }
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: #0c1014;
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+  }
+  .tabs button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.86rem;
+  }
+  .tabs button.on {
+    background: #2a6a5a;
+    color: #fff;
+  }
+  .tabs button.on.expert { background: #5a4a8a; }
+  .tabs button.on.collect { background: #3a5a8a; }
+
+  /* Views */
+  .view { display: none; height: calc(100vh - 56px); }
+  .view.on { display: flex; }
+
+  /* ===== BASIC / EXPERT workspace ===== */
+  .workspace {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(370px, 430px);
+    min-height: 0;
+  }
+  @media (max-width: 900px) {
+    .workspace {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
+      overflow: auto;
+    }
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid var(--line);
+  }
+  .stage-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: #141a20;
+  }
+  .stage-tools .btn {
+    border: 1px solid var(--line);
+    background: #1e2832;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 13px;
+    font-weight: 700;
+    font-size: 0.86rem;
+  }
+  .stage-tools .btn.primary {
+    background: linear-gradient(135deg, #1a6a58, #2aaa78);
+    border-color: #3dd6a0;
+    color: #fff;
+  }
+  .stage-tools .btn.danger {
+    background: #4a2028;
+    border-color: #8a4050;
+  }
+  .stage-tools .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .stage-tools .status {
+    margin-left: auto;
+    font-size: 0.84rem;
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .stage-tools .status b { color: var(--cyan); }
+
+  .operator-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .operator-kpi {
+    background: #10171e;
+    padding: 9px 12px;
+    min-width: 0;
+  }
+  .operator-kpi span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.76rem;
+    margin-bottom: 2px;
+  }
+  .operator-kpi strong {
+    display: block;
+    color: var(--text);
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .operator-kpi strong.warn { color: var(--amber); }
+  .operator-kpi strong.good { color: var(--green); }
+  .logic-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .logic-point { background: #0d151c; padding: 7px 9px; min-width: 0; }
+  .logic-point span { display: block; color: var(--muted); font-size: 0.72rem; margin-bottom: 3px; }
+  .logic-point strong { display: block; color: var(--cyan); font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .logic-point strong.warn { color: var(--amber); }
+  .logic-warning { display: none; padding: 7px 11px; background: #2b200d; border-bottom: 1px solid #6d531f; color: var(--amber); font-size: 0.78rem; line-height: 1.5; }
+  .logic-warning.show { display: block; }
+
+  .chain-box {
+    height: 88px;
+    border-bottom: 1px solid var(--line);
+    background: #0c1016;
+    position: relative;
+    overflow: hidden;
+  }
+  .chain-box canvas { width: 100%; height: 100%; display: block; }
+  .chain-label {
+    position: absolute; left: 10px; top: 6px;
+    font-size: 0.76rem; color: var(--muted); pointer-events: none;
+  }
+
+  .graph-box {
+    flex: 1;
+    min-height: 200px;
+    position: relative;
+    background: #080c12;
+  }
+  .graph-box canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: pan-y;
+  }
+  .graph-legend {
+    position: absolute;
+    z-index: 3;
+    right: 12px;
+    top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 7px 12px;
+    max-width: min(620px, calc(100% - 24px));
+    padding: 6px 8px;
+    border: 1px solid #2c3945;
+    border-radius: 6px;
+    background: #080d12e8;
+    color: #cbd7df;
+    font-size: 0.8rem;
+    pointer-events: auto;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .legend-line { width: 24px; height: 3px; border-radius: 2px; }
+  .legend-line.blue { background: var(--blue); }
+  .legend-line.green { background: var(--green); }
+  .legend-line.yellow { background: var(--amber); }
+  .cross-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding-left: 9px;
+    border-left: 1px solid #33424f;
+    color: var(--text);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .cross-toggle input { margin: 0; accent-color: var(--cyan); }
+  .graph-cross-v,
+  .graph-cross-h,
+  .graph-cross-dot {
+    position: absolute;
+    z-index: 4;
+    display: none;
+    pointer-events: none;
+  }
+  .graph-cross-v { width: 1px; border-left: 1px dashed #9bdfffcc; }
+  .graph-cross-h { height: 1px; border-top: 1px dashed #9bdfff99; }
+  .graph-cross-dot {
+    width: 9px;
+    height: 9px;
+    margin: -4px 0 0 -4px;
+    border: 2px solid #d9f5ff;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 8px #7fdbffaa;
+  }
+  #tip {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    z-index: 5;
+    background: rgba(10,14,20,.95);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 0.8rem;
+    min-width: 190px;
+    line-height: 1.45;
+  }
+  #tip b { color: var(--cyan); }
+  .phase-strip {
+    height: 24px;
+    display: flex;
+    border-top: 1px solid var(--line);
+  }
+  .phase-strip span {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem; font-weight: 800; color: #fff;
+    overflow: hidden; white-space: nowrap;
+  }
+
+  /* HMI panel (right) */
+  .hmi-wrap {
+    background: #0d141a;
+    padding: 12px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .hmi-screen {
+    background: var(--hmi-panel);
+    border: 1px solid var(--hmi-border);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 12px 28px #0007;
+  }
+  .hmi-title {
+    text-align: center;
+    font-weight: 900;
+    font-size: 1.1rem;
+    letter-spacing: 0.06em;
+    color: #dbe8f2;
+    margin: 0 0 14px;
+  }
+  .mobile-hmi-help { display: none; }
+  .hmi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+  }
+  .hmi-cell {
+    background: transparent;
+    border: none;
+    padding: 0;
+    text-align: center;
+    position: relative;
+  }
+  .hmi-cell .lbl {
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: var(--hmi-label);
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    min-height: 1.2em;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    margin-bottom: 5px;
+    white-space: nowrap;
+  }
+  .hmi-cell .box {
+    background: var(--hmi-box);
+    border: 1px solid #2d4037;
+    border-radius: 5px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 12px #000c;
+  }
+  .hmi-cell input {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    color: var(--hmi-green);
+    font-family: ui-monospace, "Consolas", monospace;
+    font-size: 1.36rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 8px 2px;
+    outline: none;
+  }
+  .hmi-cell input:focus {
+    background: #122018;
+  }
+  .hmi-cell.hot .box { outline: 1px solid #3a8a6a; }
+  .hmi-note {
+    align-self: end;
+    font-size: 0.8rem;
+    color: #e49a71;
+    text-align: center;
+    padding: 8px 4px;
+    border: 1px dashed #68483b;
+    border-radius: 5px;
+    font-weight: 700;
+  }
+
+  /* floating tooltip for HMI */
+  .float-tip {
+    position: fixed;
+    z-index: 1000;
+    max-width: 420px;
+    background: #0e1520;
+    border: 1px solid #3a5a7a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    color: var(--text);
+    box-shadow: 0 8px 28px #0008;
+    pointer-events: none;
+    display: none;
+    line-height: 1.55;
+  }
+  .float-tip b { color: var(--cyan); display: block; margin-bottom: 4px; font-size: 0.9rem; }
+
+  .side-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .side-actions .btn {
+    flex: 1;
+    min-width: 90px;
+    border: 1px solid #5a6a6a;
+    background: #2a353c;
+    color: #e0e8e8;
+    border-radius: 6px;
+    padding: 8px 9px;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+  .side-actions .btn.tune { background: #5a4a18; border-color: #a08030; }
+  .side-actions .btn.apply { background: #1a4a38; border-color: #3a8a68; }
+
+  .mini-problems {
+    background: #222a30;
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid #3a4550;
+  }
+  .mini-problems .t {
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: var(--amber);
+    margin-bottom: 6px;
+  }
+  .problem-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .problem-title-row .t { margin: 0; }
+  .help-link {
+    border: 0;
+    background: transparent;
+    color: var(--cyan);
+    font-size: 0.78rem;
+    padding: 3px;
+  }
+  .problem-group-label {
+    margin: 8px 0 4px;
+    color: #8193a0;
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+  .exclusive-note {
+    margin-top: 7px;
+    color: #d6b873;
+    font-size: 0.74rem;
+    line-height: 1.5;
+  }
+  .advanced-problems { display: none; width: 100%; }
+  body.mode-expert .advanced-problems { display: block; }
+  .mini-problems .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .mini-problems .chip {
+    border: 1px solid #3a4550;
+    background: #1a2228;
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .mini-problems .chip.on {
+    background: #1a4a32;
+    border-color: #3a8a58;
+    color: #fff;
+  }
+  .temp-evidence {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #3a4550;
+  }
+  .temp-evidence label {
+    display: block;
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+  .temp-input-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .temp-input-row input {
+    width: 112px;
+    background: #101820;
+    border: 1px solid #4a5b68;
+    border-radius: 5px;
+    color: var(--text);
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 0.8rem;
+  }
+  .temp-input-row span { color: var(--muted); font-size: 0.78rem; }
+  .temp-evidence .temp-summary {
+    margin-top: 5px;
+    color: var(--cyan);
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+  .temp-evidence .temp-help {
+    margin-top: 4px;
+    color: #d6b873;
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+
+  .rec-box {
+    display: none;
+    background: #1a180c;
+    border: 1px dashed #8a7020;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.78rem;
+  }
+  .rec-box.show { display: block; }
+  .rec-box h4 { margin: 0 0 7px; color: var(--amber); font-size: 0.86rem; }
+  .rec-box table { width: 100%; border-collapse: collapse; }
+  .rec-box td { padding: 3px 0; color: var(--muted); }
+  .rec-box td:last-child { text-align: right; color: var(--amber); font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
+  .rec-why {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid #4d421d;
+    color: #c6b878;
+    line-height: 1.55;
+  }
+
+  /* Expert extras under HMI */
+  .expert-extra {
+    display: none;
+    background: #1a2030;
+    border: 1px solid #3a4a6a;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.8rem;
+  }
+  body.mode-expert .expert-extra { display: block; }
+  .expert-extra label {
+    display: grid;
+    grid-template-columns: 1fr 80px;
+    gap: 6px;
+    align-items: center;
+    margin: 4px 0;
+    color: var(--muted);
+  }
+  .expert-extra input {
+    width: 100%;
+    background: #0c1018;
+    border: 1px solid #3a4a60;
+    color: var(--text);
+    border-radius: 4px;
+    padding: 6px 7px;
+    font-size: 0.84rem;
+  }
+  .expert-help {
+    display: none;
+    margin-top: 6px;
+    padding: 9px;
+    background: #121820;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    max-height: 160px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  body.mode-expert .expert-help { display: block; }
+
+  .physics-panel {
+    display: none;
+    background: #121820;
+    border: 1px solid #31404d;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.8rem;
+  }
+  body.mode-expert .physics-panel { display: block; }
+  .physics-panel h3 { margin: 0 0 7px; font-size: 0.9rem; color: var(--cyan); }
+  .physics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .physics-grid label { color: var(--muted); font-size: 0.75rem; }
+  .physics-grid input, .physics-grid select {
+    display: block;
+    width: 100%;
+    margin-top: 3px;
+    background: #080d12;
+    border: 1px solid #344552;
+    color: var(--text);
+    border-radius: 5px;
+    padding: 6px;
+  }
+  .physics-result {
+    margin-top: 8px;
+    padding: 8px;
+    border-left: 3px solid var(--amber);
+    background: #1a180e;
+    color: #d7c989;
+    line-height: 1.45;
+  }
+
+  /* ===== COLLECT TAB ===== */
+  .collect-view {
+    flex-direction: column;
+    overflow: auto;
+    padding: 16px 20px 28px;
+  }
+  .collect-view h2 {
+    margin: 0 0 6px;
+    font-size: 1.2rem;
+  }
+  .upload-panel {
+    width: 100%;
+    max-width: 1180px;
+    margin-bottom: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(320px, 1fr));
+    gap: 12px;
+  }
+  .upload-box, .csv-result {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #111820;
+    padding: 14px;
+  }
+  .upload-box { border-style: dashed; }
+  .upload-box.a { border-color: #2f6ca5; }
+  .upload-box.b { border-color: #6d56a6; }
+  .upload-box h3, .csv-result h3 { margin: 0 0 7px; font-size: 1rem; }
+  .upload-box p, .csv-result p { margin: 5px 0; color: var(--muted); font-size: 0.84rem; line-height: 1.5; }
+  .upload-box .set-purpose { color: var(--text); min-height: 34px; }
+  .upload-box .file-state { min-height: 18px; color: #aebdca; }
+  .file-label.b { background: #514078; border-color: #8069b4; }
+  .analysis-panel {
+    width: 100%;
+    max-width: 1180px;
+    margin-bottom: 14px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .analysis-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #111820;
+    padding: 12px;
+  }
+  .analysis-card h3 { margin: 0 0 7px; font-size: 0.92rem; color: var(--cyan); }
+  .analysis-card p { margin: 4px 0; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+  .analysis-card .decision { color: var(--text); font-weight: 700; }
+  .analysis-card .good { color: var(--green); }
+  .analysis-card .warn { color: var(--amber); }
+  .analysis-card .bad { color: #ff7f8d; }
+  .analysis-card.wide { grid-column: 1 / -1; }
+  .meaning-grid {
+    width: 100%;
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 14px;
+  }
+  .meaning-item { background: #0d141b; border: 1px solid var(--line); border-radius: 8px; padding: 9px; }
+  .meaning-item b { display: block; margin-bottom: 4px; font-size: 0.82rem; }
+  .meaning-item p { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+  .collect-procedure {
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 0 14px;
+    padding: 13px 15px;
+    background: #121923;
+    border: 1px solid #37516a;
+    border-radius: 10px;
+  }
+  .collect-procedure h3 { margin: 0 0 8px; font-size: 0.96rem; color: var(--cyan); }
+  .collect-procedure ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
+  .collect-procedure li { color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+  .collect-procedure b { color: var(--text); }
+  .collect-procedure .rule { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--amber); font-size: 0.8rem; line-height: 1.5; }
+  .file-label {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 7px;
+    background: #245b48;
+    color: #fff;
+    border: 1px solid #3d8b6e;
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .file-label input { display: none; }
+  .csv-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .csv-stat { background: #0a1016; border-radius: 6px; padding: 7px; }
+  .csv-stat span { display: block; color: var(--muted); font-size: 0.72rem; }
+  .csv-stat strong { color: var(--text); font-size: 0.86rem; }
+  .csv-chart-wrap {
+    display: none;
+    width: 100%;
+    max-width: 980px;
+    height: 260px;
+    margin-bottom: 14px;
+    background: #080c12;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .csv-chart-wrap.show { display: block; }
+  .csv-chart-wrap canvas { width: 100%; height: 100%; display: block; }
+
+  .help-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: #05080dcc;
+    padding: 24px;
+    overflow: auto;
+  }
+  .help-modal.show { display: block; }
+  .help-dialog {
+    max-width: 920px;
+    margin: 0 auto;
+    background: #101820;
+    border: 1px solid #334554;
+    border-radius: 14px;
+    box-shadow: 0 20px 70px #000b;
+  }
+  .help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .help-head h2 { margin: 0; font-size: 1.1rem; }
+  .help-head button { background: #1c2730; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 11px; font-size: 0.82rem; }
+  .help-body { padding: 14px 16px 20px; }
+  .help-intro { color: var(--muted); font-size: 0.86rem; line-height: 1.55; }
+  .help-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .help-item { background: #0c1218; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .help-item h3 { margin: 0 0 5px; font-size: 0.9rem; color: var(--cyan); }
+  .help-item p { margin: 3px 0; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+  .help-item b { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .operator-strip { grid-template-columns: 1fr; }
+    .logic-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .upload-panel, .analysis-panel, .meaning-grid, .help-list { grid-template-columns: 1fr; }
+    .analysis-card.wide { grid-column: auto; }
+    .hmi-wrap { overflow: visible; }
+  }
+  .collect-view .lead {
+    color: var(--muted);
+    font-size: 0.9rem;
+    max-width: 900px;
+    margin-bottom: 14px;
+  }
+  .collect-view table {
+    width: 100%;
+    max-width: 980px;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    background: #141a22;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .collect-view th, .collect-view td {
+    border-bottom: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .collect-view th {
+    background: #1a2430;
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .collect-view tr:last-child td { border-bottom: 0; }
+  .collect-view .trend-set-row td {
+    background: #202c37;
+    color: var(--text);
+    border-top: 2px solid #3b5266;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .trend-set-row b { color: var(--cyan); }
+  .trend-set-row span { color: var(--muted); margin-left: 8px; }
+  .collect-view .pri {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .pri.a { background: #1a4a32; color: #8fecc0; }
+  .pri.b { background: #4a3a10; color: #f0d080; }
+  .pri.c { background: #1a304a; color: #9ec8f0; }
+  .dtype {
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .dtype.a { color: var(--amber); }
+  .dtype.d { color: var(--cyan); }
+  .collect-note {
+    margin-top: 14px;
+    max-width: 980px;
+    padding: 10px 12px;
+    background: #1a2430;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    font-size: 0.86rem;
+    color: var(--muted);
+  }
+
+  /* Mobile operator layout: keep the desktop HMI unchanged, reflow only below 600 px. */
+  @media (max-width: 600px) {
+    html, body {
+      height: auto;
+      min-height: 100%;
+    }
+    body {
+      overflow: auto;
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .app-bar {
+      min-height: 0;
+      padding: calc(10px + env(safe-area-inset-top)) 10px 9px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+    .app-bar > div:first-child {
+      width: 100%;
+      justify-content: center;
+    }
+    .app-bar h1 {
+      max-width: 100%;
+      font-size: 1rem;
+      line-height: 1.25;
+      text-align: center;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .tabs {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 3px;
+    }
+    .tabs button {
+      min-width: 0;
+      min-height: 44px;
+      padding: 7px 3px;
+      font-size: 0.78rem;
+      line-height: 1.25;
+      white-space: normal;
+    }
+    .view {
+      height: auto;
+      min-height: calc(100vh - 112px);
+      min-height: calc(100dvh - 112px);
+    }
+    .workspace {
+      display: block;
+      overflow: visible;
+    }
+    .stage {
+      min-height: 0;
+      border-right: 0;
+    }
+    .stage-tools {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+      padding: 9px;
+    }
+    .stage-tools .btn {
+      width: 100%;
+      min-height: 44px;
+      padding: 7px 5px;
+      font-size: 0.8rem;
+    }
+    .stage-tools label {
+      min-height: 44px;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111820;
+    }
+    .stage-tools .status {
+      grid-column: 1 / -1;
+      margin-left: 0;
+      padding: 5px 2px 2px;
+      text-align: center;
+      line-height: 1.45;
+    }
+    .operator-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .operator-kpi { padding: 9px; }
+    .operator-kpi strong {
+      font-size: 0.83rem;
+      line-height: 1.35;
+      white-space: normal;
+      overflow: visible;
+    }
+    .logic-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .logic-point { padding: 8px; }
+    .logic-point:last-child { grid-column: 1 / -1; }
+    .logic-point strong {
+      font-size: 0.8rem;
+      white-space: normal;
+      overflow: visible;
+    }
+    .chain-box { height: 74px; }
+    .graph-box {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: auto;
+    }
+    .graph-box canvas {
+      order: 1;
+      flex: none;
+      height: 320px;
+    }
+    .graph-legend {
+      position: static;
+      order: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      max-width: none;
+      margin: 8px;
+      padding: 8px;
+      gap: 8px 6px;
+      font-size: 0.76rem;
+    }
+    .legend-item { white-space: normal; line-height: 1.3; }
+    .legend-line { flex: 0 0 20px; width: 20px; }
+    .cross-toggle {
+      grid-column: 1 / -1;
+      min-height: 32px;
+      padding: 6px 0 0;
+      border-left: 0;
+      border-top: 1px solid #33424f;
+      justify-content: center;
+    }
+    #tip {
+      min-width: 174px;
+      max-width: calc(100% - 16px);
+      font-size: 0.76rem;
+    }
+    .phase-strip span { font-size: 0.74rem; }
+    .hmi-wrap { padding: 10px; }
+    .hmi-screen { padding: 12px 9px; }
+    .hmi-title { font-size: 1.02rem; margin-bottom: 12px; }
+    .mobile-hmi-help {
+      display: block;
+      margin: -4px 0 11px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-align: center;
+    }
+    .hmi-grid { gap: 11px 8px; }
+    .hmi-cell .lbl {
+      min-height: 2.45em;
+      align-items: flex-end;
+      font-size: 0.8rem;
+      line-height: 1.2;
+      white-space: normal;
+    }
+    .hmi-cell .box { min-height: 46px; }
+    .hmi-cell input { font-size: 1.2rem; }
+    .hmi-note {
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      line-height: 1.35;
+    }
+    .side-actions .btn {
+      min-width: calc(50% - 4px);
+      min-height: 44px;
+    }
+    .mini-problems { padding: 11px; }
+    .mini-problems .t { font-size: 0.94rem; }
+    .help-link { font-size: 0.84rem; }
+    .problem-group-label, .exclusive-note { font-size: 0.8rem; }
+    .mini-problems .chip {
+      min-height: 38px;
+      padding: 7px 9px;
+      font-size: 0.82rem;
+    }
+    .float-tip.mobile-open {
+      display: block !important;
+      left: 8px !important;
+      right: 8px;
+      top: auto !important;
+      bottom: 8px;
+      max-width: none;
+      pointer-events: auto;
+    }
+    .collect-view {
+      min-width: 0;
+      padding: 14px 10px 24px;
+      overflow-x: hidden;
+    }
+    .collect-view h2 { font-size: 1.08rem; }
+    .upload-box, .csv-result, .analysis-card, .collect-procedure { padding: 11px; }
+    .csv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .csv-chart-wrap { height: 230px; }
+    .collect-view table {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .collect-view tbody {
+      display: table;
+      width: 680px;
+      min-width: 680px;
+      table-layout: fixed;
+    }
+    .help-modal { padding: 8px; }
+    .help-head, .help-body { padding: 12px; }
+  }
+</style>
+</head>
+<body class="mode-basic">
+
+<div class="js-required" role="alert">
+  파일 미리보기에서는 시뮬레이터가 동작하지 않습니다. GitHub Pages 주소를 iPhone/iPad는 Safari, Android는 Chrome에서 여십시오.
+</div>
+
+<div class="app-bar">
+  <div style="display:flex;align-items:center;min-width:0">
+    <h1>SC2 · CONVEYOR PROFILING</h1>
+    <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
+  </div>
+  <div class="tabs" role="tablist">
+    <button type="button" class="on" data-tab="basic" id="tabBasic">기본 모드</button>
+    <button type="button" class="expert" data-tab="expert" id="tabExpert">고급 모드</button>
+    <button type="button" class="collect" data-tab="collect" id="tabCollect">정보수집 태그</button>
+  </div>
+</div>
+
+<!-- ========== BASIC / EXPERT (same layout) ========== -->
+<div class="view on" id="viewMain">
+  <div class="workspace">
+    <!-- LEFT: full width graph + chain -->
+    <section class="stage">
+      <div class="stage-tools">
+        <button type="button" class="btn primary" id="btnCycle">▶ 1사이클 동작</button>
+        <button type="button" class="btn" id="btnPause" disabled>일시정지</button>
+        <button type="button" class="btn danger" id="btnStop" disabled>정지</button>
+        <button type="button" class="btn" id="btnReset">위치 리셋</button>
+        <label style="font-size:0.82rem;color:var(--muted);display:flex;align-items:center;gap:5px">
+          배속
+          <select id="speedMul" style="background:#1e2832;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 6px">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <div class="status" id="runStatus">
+          대기 · pos=<b>0</b> · V=<b>0.00</b> · <b id="phaseLab">IDLE</b>
+        </div>
+      </div>
+
+      <div class="operator-strip" aria-label="조업 상태 요약">
+        <div class="operator-kpi">
+          <span>현재 화면 계산</span>
+          <strong>CSM 속도 지령 프로파일</strong>
+        </div>
+        <div class="operator-kpi">
+          <span>관성·sheet 쏠림</span>
+          <strong class="warn" id="riskKpi">실측 CSV 전 판단 보류</strong>
+        </div>
+        <div class="operator-kpi">
+          <span>확인된 sheet 중량</span>
+          <strong>120~150 kg · 평지</strong>
+        </div>
+        <div class="operator-kpi">
+          <span>1사이클 최대시간 (초)</span>
+          <strong id="cycleTimeKpi">시뮬 예상 계산 중</strong>
+        </div>
+      </div>
+
+      <div class="logic-strip" aria-label="현재 파라미터의 실제 전환 위치">
+        <div class="logic-point"><span>MAX 도달 예상</span><strong id="logicAccelEnd">계산 중</strong></div>
+        <div class="logic-point"><span>DECEL 진입 조건</span><strong id="logicDecelStart">계산 중</strong></div>
+        <div class="logic-point"><span>CREEP 진입 예상</span><strong id="logicCreepEnter">계산 중</strong></div>
+        <div class="logic-point"><span>INDEX OFF · 지령 0</span><strong id="logicStopPos">계산 중</strong></div>
+        <div class="logic-point"><span>CREEP 이동 예상</span><strong id="logicCreepTravel">계산 중</strong></div>
+      </div>
+      <div class="logic-warning" id="logicWarning"></div>
+
+      <div class="chain-box">
+        <div class="chain-label">체인 위치 시뮬 (encoder counts → 화면 이동)</div>
+        <canvas id="chainCv" height="88"></canvas>
+      </div>
+
+      <div class="graph-box">
+        <canvas id="graphCv"></canvas>
+        <div class="graph-legend" aria-label="그래프 범례">
+          <span class="legend-item"><i class="legend-line blue"></i>CSM 계산 지령</span>
+          <span class="legend-item"><i class="legend-line green"></i>1사이클 실행 궤적</span>
+          <span class="legend-item"><i class="legend-line yellow"></i>CSV 실측 지령</span>
+          <label class="cross-toggle" title="그래프 위 마우스 위치의 계산 좌표를 표시합니다">
+            <input type="checkbox" id="showCrosshair" checked>
+            십자선 좌표
+          </label>
+        </div>
+        <div class="graph-cross-v" id="graphCrossV"></div>
+        <div class="graph-cross-h" id="graphCrossH"></div>
+        <div class="graph-cross-dot" id="graphCrossDot"></div>
+        <div id="tip"></div>
+      </div>
+      <div class="phase-strip" id="phaseStrip"></div>
+    </section>
+
+    <!-- RIGHT: HMI clone -->
+    <aside class="hmi-wrap">
+      <div class="hmi-screen" id="hmiScreen">
+        <div class="hmi-title">CONVEYOR PROFILING</div>
+        <div class="mobile-hmi-help">파라미터 이름을 누르면 설명이 표시됩니다.</div>
+
+        <!-- Actual HMI photo order: two equal columns, five visual rows. -->
+        <div class="hmi-grid">
+          <div class="hmi-cell" data-key="INDEX_SPEED_START">
+            <div class="lbl">INDEX SPEED START</div>
+            <div class="box"><input type="number" inputmode="decimal" id="INDEX_SPEED_START" step="0.01" value="3.00" /></div>
+          </div>
+          <div class="hmi-cell" data-key="START_CREEP_COUNT">
+            <div class="lbl">START CREEP COUNT</div>
+            <div class="box"><input type="number" inputmode="numeric" id="START_CREEP_COUNT" step="1" value="4550" /></div>
+          </div>
+          <div class="hmi-cell" data-key="INDEX_SPEED_MAX">
+            <div class="lbl">INDEX SPEED MAX</div>
+            <div class="box"><input type="number" inputmode="decimal" id="INDEX_SPEED_MAX" step="0.01" value="3.13" /></div>
+          </div>
+          <div class="hmi-cell" data-key="ACCEL_SLOPE">
+            <div class="lbl">ACCEL SLOPE</div>
+            <div class="box"><input type="number" inputmode="decimal" id="ACCEL_SLOPE" step="0.01" value="1.50" /></div>
+          </div>
+          <div class="hmi-cell" data-key="INDEX_SPEED_MIN">
+            <div class="lbl">INDEX SPEED MIN</div>
+            <div class="box"><input type="number" inputmode="decimal" id="INDEX_SPEED_MIN" step="0.01" value="2.50" /></div>
+          </div>
+          <div class="hmi-cell" data-key="DECEL_SLOPE">
+            <div class="lbl">DECEL SLOPE</div>
+            <div class="box"><input type="number" inputmode="decimal" id="DECEL_SLOPE" step="0.01" value="-1.37" /></div>
+          </div>
+          <div class="hmi-cell" data-key="START_DECEL_COUNTS">
+            <div class="lbl">START DECEL COUNTS</div>
+            <div class="box"><input type="number" inputmode="numeric" id="START_DECEL_COUNTS" step="1" value="3900" /></div>
+          </div>
+          <div class="hmi-cell" data-key="HOMING_SPEED">
+            <div class="lbl">HOMING SPEED</div>
+            <div class="box"><input type="number" inputmode="decimal" id="HOMING_SPEED" step="0.01" value="1.27" /></div>
+          </div>
+          <div class="hmi-cell" data-key="FMM_REV_SPEED">
+            <div class="lbl">FMM_REV_SPEED</div>
+            <div class="box"><input type="number" inputmode="decimal" id="FMM_REV_SPEED" step="0.01" value="1.90" /></div>
+          </div>
+          <div class="hmi-note">전후진 공용 (기본값) 1.0</div>
+        </div>
+      </div>
+
+      <div class="side-actions">
+        <button type="button" class="btn" id="btnCapture">캡처값</button>
+        <button type="button" class="btn tune" id="btnTune">추천 후보 계산</button>
+        <button type="button" class="btn apply" id="btnApplyRec" disabled>화면 시험값 적용</button>
+      </div>
+
+      <div class="mini-problems">
+        <div class="problem-title-row">
+          <div class="t">무엇이 불편한가요? · 중복 선택</div>
+          <button type="button" class="help-link" id="btnHelp">왜 선택하나요?</button>
+        </div>
+        <div class="problem-group-label">조업자가 바로 느끼는 증상</div>
+        <div class="chips" id="probChips">
+          <button type="button" class="chip" data-p="sheetSurge">자동 정지 때 sheet가 앞으로 쏠림</button>
+          <button type="button" class="chip" data-p="hard">자동 정지 순간 충격</button>
+          <button type="button" class="chip" data-p="startShock">자동 출발 순간 툭</button>
+          <button type="button" class="chip" data-p="late">자동 INDEX 정지점을 지나 더 움직임</button>
+          <button type="button" class="chip" data-p="early">자동 INDEX 정지점 전에 멈춤</button>
+          <button type="button" class="chip" data-p="pulse">자동운전 중 속도 반복 변화</button>
+          <button type="button" class="chip" data-p="slow">자동 1사이클이 평소보다 느림</button>
+          <button type="button" class="chip" data-p="home">Homing 때 INDEX 센서를 지나침</button>
+          <div class="advanced-problems">
+            <div class="problem-group-label">고급 진단 증상</div>
+            <div class="chips">
+              <button type="button" class="chip" data-p="stopDrift">지령 0 후 엔코더가 계속 증가</button>
+              <button type="button" class="chip" data-p="cycleVariation">같은 조건인데 정지 count가 매번 다름</button>
+              <button type="button" class="chip" data-p="cavitation">감속 중 모터 떨림·소음</button>
+              <button type="button" class="chip" data-p="chainShock">가속·감속 전환 때 체인 충격음</button>
+              <button type="button" class="chip" data-p="skew">자동 이동 중 sheet가 좌우로 비틀림</button>
+              <button type="button" class="chip" data-p="sensor">INDEX 센서 전환 후 정지 count 불안정</button>
+              <button type="button" class="chip" data-p="directionDiff">같은 수동 설정인데 전진·후진 속도가 다름</button>
+              <button type="button" class="chip" data-p="loadDiff">120kg와 150kg sheet의 속도가 다름</button>
+            </div>
+          </div>
+        </div>
+        <div class="exclusive-note">‘자동 INDEX 정지점을 지나 더 움직임’과 ‘자동 INDEX 정지점 전에 멈춤’은 반대 증상이므로 동시에 선택되지 않습니다. 여기서 INDEX 정지점은 자동 이송 중 i_conveyor_index가 OFF되는 지점이며 Homing 위치와 다릅니다.</div>
+        <div class="problem-group-label">오일 온도 상태 · 한 개 선택</div>
+        <div class="chips" style="margin-top:6px" id="tempChips">
+          <button type="button" class="chip" data-t="cold">냉간</button>
+          <button type="button" class="chip on" data-t="normal">정상 온도</button>
+          <button type="button" class="chip" data-t="hot">고온</button>
+        </div>
+        <div class="temp-evidence">
+          <label for="OIL_TEMP_C">실제 오일 온도 · 선택 입력 (ISO VG 46)</label>
+          <div class="temp-input-row">
+            <input type="number" id="OIL_TEMP_C" min="-20" max="150" step="0.1" placeholder="예: 45.0" aria-describedby="tempHelp tempSummary">
+            <span>°C</span>
+          </div>
+          <div class="temp-summary" id="tempSummary">실측값 없음 · 조업자 선택: 정상 온도</div>
+          <div class="temp-help" id="tempHelp">ISO VG 46은 40°C 기준 점도 등급입니다. 설비 정상온도 범위는 제조사·유압장치 기준을 확인해야 하므로, 이 화면은 임의의 온도 경계를 자동 적용하지 않습니다.</div>
+        </div>
+      </div>
+
+      <div class="rec-box" id="recBox">
+        <h4>추천 후보 (화면 미적용)</h4>
+        <table id="recTable"></table>
+        <div class="rec-why" id="recWhy"></div>
+      </div>
+
+      <div class="expert-extra">
+        <div style="font-weight:800;margin-bottom:6px;color:var(--purple)">고급 · CSM 프로그램 추가값</div>
+        <label>TARGET COUNTS <input type="number" id="TARGET_COUNTS" value="5000" step="1" /></label>
+        <label>POLARITY <input type="number" id="POLARITY" value="1.90" step="0.01" /></label>
+        <label>INDEX 위치 시뮬 <input type="number" id="INDEX_POS" value="4800" step="1" /></label>
+        <label>INDEX 창 폭 <input type="number" id="INDEX_WIDTH" value="80" step="1" /></label>
+        <label>그래프 X max <input type="number" id="X_MAX" value="5200" step="100" /></label>
+        <div class="expert-help" id="expertHelp"></div>
+      </div>
+
+      <div class="physics-panel">
+        <h3>관성·sheet 쏠림 분석 입력</h3>
+        <div class="physics-grid">
+          <label>sheet 최소 kg<input type="number" id="MASS_MIN" value="120" min="1" step="1" /></label>
+          <label>sheet 최대 kg<input type="number" id="MASS_MAX" value="150" min="1" step="1" /></label>
+          <label>엔코더 counts/mm<input type="number" id="COUNTS_PER_MM" placeholder="미확인" min="0" step="0.01" /></label>
+          <label>정지마찰계수 μ<input type="number" id="FRICTION_MU" placeholder="미확인" min="0" max="2" step="0.01" /></label>
+          <label>유압 응답지연 ms<input type="number" id="HYD_LAG_MS" placeholder="CSV로 추정" min="0" step="10" /></label>
+          <label>실측 밀림거리 mm<input type="number" id="OVERRUN_MM" placeholder="미확인" min="0" step="1" /></label>
+        </div>
+        <div class="physics-result" id="physicsResult">중량 120~150 kg와 평지 조건은 반영했습니다. 물리 가속도와 쏠림 위험 계산에는 SC2 실측 CSV와 counts/mm가 더 필요합니다.</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ========== COLLECT ========== -->
+<div class="view collect-view" id="viewCollect">
+  <h2>정보수집 태그 · Studio 5000 Trend</h2>
+  <p class="lead">
+    HMI CONVEYOR PROFILING 계산에 따라 <b>움직이는</b> 데이터입니다.
+    <b>CSM 프로그램 분석</b> · Program: <code>Sheet_Conveyor_2</code>.
+    기본 수집은 <b>10 ms · 정상 자동운전 5분</b>, 증상이 드물면 최대 30분입니다. 한 Trend는 최대 8 pen이므로
+    <b>Trend A 8개</b>와 <b>Trend B 7개</b>를 별도 CSV로 수집합니다. 두 파일은 이 PC의 브라우저 메모리에서만 처리되며 인터넷이나 외부 서버를 사용하지 않습니다.
+    현재 SC2 트렌드는 없으며 CSV 행 구조만 기존 CSM Trend 파일을 참고했습니다.
+  </p>
+
+  <div class="meaning-grid" aria-label="분석 결과 의미">
+    <div class="meaning-item"><b style="color:#7fbdff">측정</b><p>CSV에 직접 기록된 시간·위치·지령·상태값입니다.</p></div>
+    <div class="meaning-item"><b style="color:#f5c042">근사</b><p>엔코더 위치 변화로 속도·감속도를 계산한 값입니다. 유압모터 실속도 측정값은 아닙니다.</p></div>
+    <div class="meaning-item"><b style="color:#c6a5ff">추천 후보</b><p>현 설정과 증상, Trend A 실측을 반영한 제한적 조정안입니다. 자동 생산 적용값이 아닙니다.</p></div>
+    <div class="meaning-item"><b style="color:#ff7f8d">판단 불가</b><p>태그·단위·시간 겹침이 부족하면 추측하지 않고 필요한 정보를 표시합니다.</p></div>
+  </div>
+
+  <section class="collect-procedure" aria-labelledby="collectProcedureTitle">
+    <h3 id="collectProcedureTitle">SC2 현장 Trend 수집 절차</h3>
+    <ol>
+      <li><b>수집 전 기록:</b> HMI 파라미터 9개가 보이게 사진을 찍고 오일 상태(냉간/정상/고온), sheet 중량 범위, 증상을 메모합니다.</li>
+      <li><b>설정:</b> Trend A는 8 pen, Trend B는 7 pen으로 따로 만들고 두 Trend 모두 <b>Sample Period 10 ms</b>로 설정합니다.</li>
+      <li><b>기본 수집:</b> 정상 자동운전에서 A와 B를 가능한 한 같은 시각에 시작해 <b>5분간</b> 기록합니다. 수집 중 파라미터를 변경하지 않습니다.</li>
+      <li><b>종료:</b> A와 B를 같은 시각에 종료하고 <code>SC2_A_날짜_시간.csv</code>, <code>SC2_B_날짜_시간.csv</code>처럼 구분해 저장합니다.</li>
+      <li><b>증상이 드문 경우:</b> 5분 안에 증상이 없으면 조건을 바꾸지 않고 <b>최대 30분</b>까지 연장 수집합니다. 분석기는 전체 10 ms 샘플을 사이클별로 자동 분리합니다.</li>
+      <li><b>호밍 확인:</b> 자동운전 기록과 별도로 B를 먼저 시작하고 Homing 1회를 수행한 뒤 약 1분 이내에 종료합니다. 파일명에 <code>HOMING</code>을 넣습니다.</li>
+      <li><b>로컬 입력:</b> 이 화면의 Trend A 선택칸과 Trend B 선택칸에 각각 넣습니다. 두 파일의 날짜·시간이 겹쳐야 같은 운전의 종합분석이 가능합니다.</li>
+    </ol>
+    <div class="rule"><b>중요:</b> 5분과 30분 파일을 섞어 평균내지 않습니다. 오일 온도·sheet 조건·파라미터가 달라지면 새 파일로 분리합니다. CSV는 브라우저 메모리에서만 읽고 외부로 보내지 않습니다.</div>
+  </section>
+
+  <div class="upload-panel">
+    <div class="upload-box a" id="uploadBoxA">
+      <h3>① Trend A · 동작 프로파일 CSV</h3>
+      <p class="set-purpose">위치·지령·AO·인덱스·4개 운전구간을 분석합니다. <b>기본 분석과 실측 기반 추천 후보에 필수</b>입니다.</p>
+      <label class="file-label">Trend A 선택<input type="file" id="csvFileA" accept=".csv,text/csv" /></label>
+      <p class="file-state" id="csvFileNameA">선택 안 됨</p>
+      <div class="csv-result" id="csvResultA"><h3>Trend A 분석 대기</h3><p>위치와 지령 태그가 모두 있어야 실측 프로파일을 계산합니다.</p></div>
+    </div>
+    <div class="upload-box b" id="uploadBoxB">
+      <h3>② Trend B · 상태·Interlock CSV</h3>
+      <p class="set-purpose">운전·호밍·허가·정지상태의 전환시간을 분석합니다. <b>원인 확인용</b>이며 A와 별도로 선택합니다.</p>
+      <label class="file-label b">Trend B 선택<input type="file" id="csvFileB" accept=".csv,text/csv" /></label>
+      <p class="file-state" id="csvFileNameB">선택 안 됨</p>
+      <div class="csv-result" id="csvResultB"><h3>Trend B 분석 대기</h3><p>Trend A 없이도 읽을 수 있지만 프로파일 추천값은 만들지 않습니다.</p></div>
+    </div>
+  </div>
+  <div class="analysis-panel" aria-label="로컬 종합 판단">
+    <div class="analysis-card"><h3>입력 상태</h3><p class="decision" id="localInputState">A 미입력 · B 미입력</p><p>새 파일을 선택하면 같은 종류의 이전 파일만 교체됩니다.</p></div>
+    <div class="analysis-card"><h3>A·B 시간 결합</h3><p class="decision" id="mergeState">두 파일 대기</p><p>절대 날짜·시간이 겹치는 구간만 같은 기계 동작으로 비교합니다.</p></div>
+    <div class="analysis-card"><h3>추천 수준</h3><p class="decision warn" id="recommendationLevel">증상 기반 가설</p><p id="recommendationMeaning">Trend A가 없으므로 실제 가동값 기반 추천이 아닙니다.</p></div>
+    <div class="analysis-card wide"><h3>현재 로컬 판단</h3><p id="combinedResult">Trend A를 먼저 넣으면 프로파일·사이클·정지 후 추가 이동을 계산합니다. Trend B는 그 결과의 상태 전환 원인을 확인할 때 사용합니다.</p></div>
+  </div>
+  <div class="csv-chart-wrap" id="csvChartWrap"><canvas id="csvCv"></canvas></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>우선</th>
+        <th>태그</th>
+        <th>형식</th>
+        <th>설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="trend-set-row">
+        <td colspan="5"><b>Trend A · 동작 프로파일</b><span>8 / 8 pen · 먼저 수집 · 기본 분석용 CSV</span></td>
+      </tr>
+      <tr>
+        <td>1</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\ic_conveyor_position</code></td>
+        <td class="dtype a">아날로그</td>
+        <td>엔코더 위치(counts). 가속/감속 식의 가로축.</td>
+      </tr>
+      <tr>
+        <td>2</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\var_volts_velocity</code></td>
+        <td class="dtype a">아날로그</td>
+        <td>속도 지령 V. HMI slope/speed가 만드는 곡선.</td>
+      </tr>
+      <tr>
+        <td>3</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\oa_conveyor</code></td>
+        <td class="dtype a">아날로그</td>
+        <td>AO 출력 raw. (v+bias)×32767/10</td>
+      </tr>
+      <tr>
+        <td>4</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\i_conveyor_index</code></td>
+        <td class="dtype d">디지털</td>
+        <td>인덱스 센서. 정지/호밍 완료는 NOT index.</td>
+      </tr>
+      <tr>
+        <td>5</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\State_Accel_001.X</code></td>
+        <td class="dtype d">디지털</td>
+        <td>ACCEL 구간 (ACCEL SLOPE, INDEX SPEED START)</td>
+      </tr>
+      <tr>
+        <td>6</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\State_Full_Speed_001.X</code></td>
+        <td class="dtype d">디지털</td>
+        <td>FULL 구간 (INDEX SPEED MAX)</td>
+      </tr>
+      <tr>
+        <td>7</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\State_Decel_001.X</code></td>
+        <td class="dtype d">디지털</td>
+        <td>DECEL 구간 (START DECEL/CREEP, DECEL SLOPE)</td>
+      </tr>
+      <tr>
+        <td>8</td><td><span class="pri a">필수</span></td>
+        <td><code>Program:Sheet_Conveyor_2\State_Creep_In_001.X</code></td>
+        <td class="dtype d">디지털</td>
+        <td>CREEP 구간. 감속 마지막 지령(약 MIN)을 유지하며 INDEX 센서 OFF를 기다림.</td>
+      </tr>
+      <tr class="trend-set-row">
+        <td colspan="5"><b>Trend B · 상태·Interlock</b><span>7 / 8 pen · A와 별도 수집 · 원인 보조 확인</span></td>
+      </tr>
+      <tr>
+        <td>1</td><td><span class="pri b">권장</span></td>
+        <td><code>Program:Sheet_Conveyor_2\ui_o_homing_in_progress</code></td>
+        <td class="dtype d">디지털</td>
+        <td>호밍 중</td>
+      </tr>
+      <tr>
+        <td>2</td><td><span class="pri b">권장</span></td>
+        <td><code>Program:Sheet_Conveyor_2\ui_o_conveyor_homed</code></td>
+        <td class="dtype d">디지털</td>
+        <td>홈 완료</td>
+      </tr>
+      <tr>
+        <td>3</td><td><span class="pri b">권장</span></td>
+        <td><code>Program:Sheet_Conveyor_2\interlock_home</code></td>
+        <td class="dtype d">디지털</td>
+        <td>홈 interlock (센서 이탈 시 깨짐)</td>
+      </tr>
+      <tr>
+        <td>4</td><td><span class="pri b">권장</span></td>
+        <td><code>Program:Sheet_Conveyor_2\interlock_stopped</code></td>
+        <td class="dtype d">디지털</td>
+        <td>정지 interlock</td>
+      </tr>
+      <tr>
+        <td>5</td><td><span class="pri c">선택</span></td>
+        <td><code>Program:Sheet_Conveyor_2\permit_start</code></td>
+        <td class="dtype d">디지털</td>
+        <td>자동 출발 트리거</td>
+      </tr>
+      <tr>
+        <td>6</td><td><span class="pri c">선택</span></td>
+        <td><code>Program:Sheet_Conveyor_2\State_Idle_001.X</code></td>
+        <td class="dtype d">디지털</td>
+        <td>대기</td>
+      </tr>
+      <tr>
+        <td>7</td><td><span class="pri c">선택</span></td>
+        <td><code>Program:Sheet_Conveyor_2\ui_o_running</code></td>
+        <td class="dtype d">디지털</td>
+        <td>운전 중</td>
+      </tr>
+      <tr>
+        <td>—</td><td><span class="pri c">메모</span></td>
+        <td>HMI 9개 + target/polarity/bias</td>
+        <td class="dtype a">아날로그</td>
+        <td>pen에 넣지 않음. Trend 시작 전 HMI 화면을 사진 또는 작업 메모로 기록.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="collect-note">
+    <b style="color:var(--text)">Trend A · 8 pen:</b>
+    position · var_volts_velocity · oa_conveyor · i_conveyor_index ·
+    Accel.X · Full.X · Decel.X · Creep.X<br>
+    이 파일만으로 프로파일·사이클·지령 후 추가 이동을 분석하고 제한적인 추천 후보를 계산합니다.<br>
+    <b style="color:var(--text)">Trend B · 7 pen:</b> 운전·호밍·허가·정지상태 전환시간을 분석하며, A와 날짜·시간이 겹칠 때만 종합 판단에 결합합니다.<br>
+    별도 실속도·압력·유량 피드백이 없으므로 유압 원인은 확정하지 않습니다. 모든 계산은 이 HTML 파일 안에서 오프라인으로 실행됩니다.
+  </div>
+</div>
+
+<div class="help-modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="help-dialog">
+    <div class="help-head">
+      <h2 id="helpTitle">증상 선택 상세 도움말</h2>
+      <button type="button" id="btnHelpClose">닫기</button>
+    </div>
+    <div class="help-body">
+      <p class="help-intro">
+        여러 증상을 동시에 선택할 수 있습니다. 선택값은 원인을 확정하지 않고 추천 방향의 가중치로만 사용합니다.
+        유압 압력·유량·실속도·정지 밀림을 확인하기 전에는 CSM 프로그램 값 변경안을 생산 적용값으로 보지 않습니다.
+      </p>
+      <div class="help-list" id="helpList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="float-tip" id="floatTip"></div>
+
+<script>
+/* =========================================================
+   SC2 HMI-first simulator — CSM Sheet_Conveyor_2 formulas
+   ========================================================= */
+
+document.body.classList.add("js-ready");
+
+const CAPTURE = {
+  START_CREEP_COUNT: 4550,
+  START_DECEL_COUNTS: 3900,
+  ACCEL_SLOPE: 1.50,
+  DECEL_SLOPE: -1.37,
+  INDEX_SPEED_START: 3.00,
+  INDEX_SPEED_MAX: 3.13,
+  INDEX_SPEED_MIN: 2.50,
+  HOMING_SPEED: 1.27,
+  FMM_REV_SPEED: 1.90,
+  TARGET_COUNTS: 5000,
+  POLARITY: 1.90,
+  INDEX_POS: 4800,
+  INDEX_WIDTH: 80,
+  X_MAX: 5200,
+};
+
+/** Operator hover texts (HMI names kept) */
+const TIPS = {
+  START_CREEP_COUNT: {
+    basic: "자동 sheet 이송의 DECEL 계산에 쓰는 기준 count입니다. 이름과 달리 이 count에서 CREEP 상태로 바뀌지 않습니다.\n• 값을 낮춤 → 같은 DECEL SLOPE가 더 짧은 거리 안에 적용되어 지령이 빨리 낮아지고 CREEP 진입이 앞당겨짐\n• 값을 높임 → 지령이 천천히 낮아져 CREEP 진입이 늦어짐\n실제 CREEP 진입은 지령이 INDEX SPEED MIN 아래로 내려갈 때이며, 최종 정지는 INDEX 센서 OFF일 때입니다. Homing에는 사용되지 않습니다.",
+  },
+  START_DECEL_COUNTS: {
+    basic: "자동 sheet 이송 중 엔코더 count가 이 값보다 커지면 FULL에서 DECEL로 바뀝니다. 여기서 말하는 ‘늦게 멈춤’은 Homing이 아니라, 자동 이송의 INDEX 센서 OFF 정지점을 지난 뒤 sheet·엔코더가 진행방향으로 더 움직이는 현상입니다.\n• 값을 낮춤 → INDEX 센서에 도달하기 전 더 일찍, 더 완만하게 감속 시작\n• 값을 높임 → 고속구간이 길어지고 감속 시작이 INDEX 센서 쪽으로 늦어짐\n이 값은 정지 명령 위치가 아닙니다. 최종 지령 0 조건은 INDEX 센서 OFF이며 Homing에는 사용되지 않습니다.",
+  },
+  ACCEL_SLOPE: {
+    basic: "자동운전에서 위치가 증가할 때 출발 지령을 올리는 기울기입니다.\n• 값을 낮춤 → MAX 도달 위치가 뒤로 이동하여 출발이 부드러워짐. 너무 낮으면 고속구간이 짧아짐\n• 값을 높임 → MAX에 더 빨리 도달하여 출발 충격과 체인 유격 충격 가능성이 커짐\nHoming과 수동운전에는 사용되지 않습니다.",
+  },
+  DECEL_SLOPE: {
+    basic: "자동운전 DECEL 구간에서 위치당 지령이 내려가는 정도이며 정상 방향은 음수입니다.\n• 더 큰 음수(예: -1.37→-1.45) → 지령이 빨리 낮아지고 CREEP 진입이 앞당겨지지만 감속 충격 가능성 증가\n• 0에 가까움(예: -1.37→-1.20) → 지령이 천천히 낮아지고 높은 속도로 INDEX에 접근할 수 있음\n단독 변경보다 START DECEL과 함께 결과 위치를 확인해야 합니다.",
+  },
+  INDEX_SPEED_START: {
+    basic: "자동 1사이클이 시작될 때 사용하는 최초 지령전압입니다.\n• 값을 낮춤 → 출발 충격 감소 가능. 너무 낮으면 유압모터가 바로 돌지 않거나 출발이 늦어짐\n• 값을 높임 → 출발 반응은 빨라지지만 sheet와 체인이 순간적으로 움직일 수 있음\nHoming과 수동운전에는 사용되지 않습니다.",
+  },
+  INDEX_SPEED_MAX: {
+    basic: "자동운전 FULL 구간의 최고 지령전압이며 감속식의 시작값이기도 합니다.\n• 값을 낮춤 → 최고속도와 관성 감소, 사이클시간 증가 가능\n• 값을 높임 → 사이클시간 단축 가능, 감속거리와 sheet 쏠림 위험 증가\n실제 모터속도가 아니라 밸브로 보내는 지령값입니다.",
+  },
+  INDEX_SPEED_MIN: {
+    basic: "자동 sheet 이송의 DECEL 계산 지령이 이 값보다 낮아지면 CREEP 상태로 바뀝니다. CREEP에서는 마지막 감속 지령(대략 이 값)을 유지하며 INDEX 센서 OFF 지점까지 이동합니다.\n• 값을 높임 → CREEP에 더 일찍 들어가지만 INDEX 센서 접근 지령도 높아짐\n• 값을 낮춤 → DECEL이 길어지고 CREEP 진입이 늦어짐. 너무 낮으면 유압모터가 움직이지 못할 수 있음\n이 값 자체가 정지 명령은 아닙니다. 최종 지령 0은 INDEX 센서 OFF일 때이며 Homing에는 사용되지 않습니다.",
+  },
+  HOMING_SPEED: {
+    basic: "수동 Homing 중 INDEX 센서를 찾을 때 사용하는 기본 지령입니다. 실제 지령은 HOMING SPEED × POLARITY입니다.\n• 값을 낮춤 → 센서 통과 후 밀림 감소 가능. 너무 낮으면 움직이지 않을 수 있음\n• 값을 높임 → Homing은 빨라지지만 센서를 지나칠 가능성 증가\n자동 1사이클에는 사용되지 않습니다.",
+  },
+  FMM_REV_SPEED: {
+    basic: "수동 전진·후진 버튼 운전에서 사용하는 속도 기준값입니다.\n• 값을 낮춤 → 수동 이동이 느리고 위치 맞추기가 쉬워짐\n• 값을 높임 → 수동 이동이 빨라져 정지 후 밀림과 충격 가능성 증가\n자동 1사이클과 Homing 프로파일에는 사용되지 않습니다. 정확한 HMI 태그 연결은 현장 화면 바인딩 확인이 필요합니다.",
+  },
+};
+
+const PROBLEM_INFO = {
+  sheetSurge: {
+    label: "자동 정지 때 sheet가 진행방향 앞으로 쏠림",
+    cause: "컨베이어 감속도가 sheet와 받침면의 정지마찰 한계를 넘거나, 유압모터·체인이 지령 0 이후에도 관성으로 진행할 수 있습니다.",
+    action: "첫 시험은 최고속도·감속기울기를 유지하고 START DECEL만 조금 낮춰 감속 시작을 앞당깁니다. 그래도 남으면 실측 CSV와 안전검토 후 최고속도 조정을 별도로 검토합니다.",
+  },
+  hard: {
+    label: "자동 정지 순간 컨베이어·sheet에 충격",
+    cause: "감속 구간이 짧거나 DECEL SLOPE가 너무 급하고, 밸브 응답 또는 부하제어 회로가 급격히 유량을 차단할 때 나타날 수 있습니다.",
+    action: "첫 시험은 START DECEL만 조금 낮춰 감속 거리를 늘립니다. DECEL SLOPE와 최고속도는 동시에 바꾸지 말고 압력 급상승과 유압모터 떨림·이상소음도 확인합니다.",
+  },
+  startShock: {
+    label: "자동 1사이클 출발 순간 툭 움직임",
+    cause: "INDEX SPEED START가 높거나 ACCEL SLOPE가 가파르고, 체인 유격·스프로킷 백래시가 한 번에 물릴 때 나타날 수 있습니다.",
+    action: "첫 시험은 INDEX SPEED START만 조금 낮춥니다. 그래도 충격이 남을 때 ACCEL SLOPE를 별도 시험하며, 너무 낮아 유압모터가 출발하지 못하는지 확인합니다.",
+  },
+  late: {
+    label: "자동 1사이클이 INDEX 센서 OFF 정지점을 지나 더 움직임",
+    cause: "감속 시작이 늦거나 유압 응답지연·오일 온도·부하 증가로 실제 속도가 지령을 늦게 따라갈 수 있습니다.",
+    action: "START DECEL COUNTS를 낮춰 자동운전 감속을 앞당기는 방향을 검토하고 CSV에서 지령 0 이후 엔코더 이동을 확인합니다. Homing 위치 지나침과는 별도 증상입니다.",
+  },
+  early: {
+    label: "자동 1사이클이 INDEX 기준 정지점 전에 멈춤",
+    cause: "SC2 논리는 INDEX 센서 OFF까지 CREEP 지령을 유지하므로, 정상 구동력이 있다면 START DECEL 값만으로 먼저 멈추지 않습니다. 센서가 일찍 OFF되었거나 저속 지령에서 유압모터가 움직이지 못한 경우를 구분해야 합니다.",
+    action: "파라미터를 바로 올리지 말고 i_conveyor_index, Creep.X, 지령전압, 엔코더 위치를 함께 확인합니다. 센서 OFF가 먼저인지 모터 정지가 먼저인지 확인한 뒤 조정합니다.",
+  },
+  pulse: {
+    label: "자동운전 중 속도가 반복적으로 빨라졌다 느려짐",
+    cause: "밸브 스풀 sticking, 유량·압력 맥동, 공기 혼입, 체인 장력 불균일 또는 엔코더 노이즈 가능성이 있습니다.",
+    action: "파라미터 변경보다 압력·AO·위치의 동시 트렌드를 먼저 수집합니다.",
+  },
+  slow: {
+    label: "자동 1사이클 시간이 평소보다 길어짐",
+    cause: "최고속도 지령이 낮거나 냉간 점도, 공급유량 부족, 내부 누설 또는 높은 부하 영향일 수 있습니다.",
+    action: "원인 확인 전 속도만 올리지 말고 냉간/정상 온도 CSV와 사이클 시간을 비교합니다.",
+  },
+  home: {
+    label: "수동 Homing 때 INDEX 센서를 지나쳐 더 움직임",
+    cause: "HOMING SPEED가 높거나 인덱스 센서 응답 이후 실제 유압 구동이 늦게 멈출 수 있습니다.",
+    action: "HOMING SPEED를 낮추고 센서 전환부터 엔코더 정지까지 지연을 측정합니다.",
+  },
+  stopDrift: {
+    label: "자동운전 지령이 0이 된 뒤 엔코더 위치가 계속 증가",
+    cause: "오버러닝 부하, 내부 누설, 밸브 중립 누설, 체인 탄성 복원 또는 브레이크/부하제어 문제 가능성이 있습니다.",
+    action: "지령 0, AO 0, 위치 변화, 압력 A/B를 함께 확인합니다. CSM 프로파일만으로 원인을 확정할 수 없습니다.",
+  },
+  cycleVariation: {
+    label: "같은 조건인데 자동 정지 count가 사이클마다 다름",
+    cause: "오일 온도·부하·마찰·센서 타이밍 또는 엔코더 누적 조건이 사이클마다 달라질 수 있습니다.",
+    action: "10 ms 간격으로 5분간 연속 수집해 사이클 시간과 정지 위치 편차를 비교합니다.",
+  },
+  cavitation: {
+    label: "감속 중 모터 떨림·소음",
+    cause: "감속할 때 유압모터가 덜덜 떨리거나 거친 소리가 반복되는 경우입니다. 오일 공급 부족, 공기 혼입 또는 감속 중 압력 불안정 여부를 확인해야 합니다.",
+    action: "같은 동작을 계속 반복하지 말고 감속 구간의 압력, 오일 상태와 모터 진동을 점검합니다.",
+  },
+  chainShock: {
+    label: "ACCEL·DECEL·CREEP 전환 순간 체인 충격음",
+    cause: "체인 늘어짐, 스프로킷 마모, 백래시 또는 급가감속으로 장력이 급변할 수 있습니다.",
+    action: "기계 장력·윤활·마모를 먼저 확인하고 가감속을 완만하게 시험합니다.",
+  },
+  skew: {
+    label: "자동 이동 중 sheet가 진행방향 기준 좌우로 비틀림",
+    cause: "좌우 지지 마찰 차이, 체인 평행도·가이드 간섭 또는 sheet 안착 불균일 가능성이 있습니다.",
+    action: "프로파일뿐 아니라 가이드, 체인 동기, 접촉면 오염과 sheet 위치를 확인합니다.",
+  },
+  sensor: {
+    label: "INDEX 센서 OFF 이후 최종 정지 count가 매번 다름",
+    cause: "센서 채터링·설치 위치·스캔 타이밍 또는 센서 전환 후 유압 응답지연 가능성이 있습니다.",
+    action: "i_conveyor_index, 상태 Step, 지령전압, 엔코더 위치를 10 ms로 동시에 수집합니다.",
+  },
+  directionDiff: {
+    label: "같은 수동 속도 설정인데 전진과 후진 실제 속도가 다름",
+    cause: "밸브 유량 특성, 모터 누설, 부하 방향 또는 polarity/수동속도 적용 차이 가능성이 있습니다.",
+    action: "동일 온도·무부하 조건에서 양방향 AO와 엔코더 속도를 비교합니다.",
+  },
+  loadDiff: {
+    label: "120 kg와 150 kg sheet에서 실제 이동속도·사이클시간이 다름",
+    cause: "유압 공급 여유, 내부 누설, 압력보상 또는 마찰 변화가 120~150 kg 범위에서 드러날 수 있습니다.",
+    action: "sheet 중량 구간별로 사이클 시간·최고속도·정지 밀림을 비교합니다.",
+  },
+};
+
+const EXCLUSIVE_PROBLEMS = {
+  late: "early",
+  early: "late",
+};
+
+const TEMP_LABELS = { cold: "냉간", normal: "정상 온도", hot: "고온" };
+const TEMP_HELP_INFO = {
+  label: "오일 온도 상태 · ISO VG 46",
+  cause: "ISO VG 46은 40°C 기준 점도 등급이며, 이 등급만으로 설비의 정상·고온 경계를 정할 수 없습니다. 냉간에서는 점도 증가로 출발 지연·사이클 증가·저속 실속을, 고온에서는 점도 저하·내부 누설·지령 0 후 추가 이동을 확인합니다.",
+  action: "온도만 선택해도 파라미터는 바뀌지 않습니다. 실제 온도와 Trend 조건을 기록해 같은 온도끼리 비교하고, 증상이 있을 때만 해당 증상 규칙의 START DECEL·INDEX SPEED START·HOMING SPEED 후보를 검토합니다."
+};
+
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  tab: "basic",
+  problems: new Set(),
+  temp: "normal",
+  oilTempC: NaN,
+  rec: null,
+  before: null,
+  csvA: null,
+  csvB: null,
+  // sim
+  running: false,
+  paused: false,
+  pos: 0,
+  v: 0,
+  phase: "IDLE",
+  trail: [], // {pos,v,phase}
+  raf: 0,
+  timer: 0,
+  finishHold: 0,
+  lastT: 0,
+  cycleElapsed: 0,
+  simCycleMax: 0,
+  simCycleCount: 0,
+  lastRenderAt: 0,
+};
+
+function g(id, d) {
+  const el = $(id);
+  if (!el) return d;
+  const v = parseFloat(el.value);
+  return Number.isFinite(v) ? v : d;
+}
+
+function oilTemperatureC() {
+  const value = parseFloat($("OIL_TEMP_C")?.value);
+  return Number.isFinite(value) ? value : NaN;
+}
+
+function oilConditionSummary() {
+  const measured = oilTemperatureC();
+  const label = TEMP_LABELS[state.temp] || state.temp;
+  return Number.isFinite(measured)
+    ? `측정 ${measured.toFixed(1)}°C · 조업자 선택 ${label} · 제조사 기준 미등록`
+    : `실측값 없음 · 조업자 선택: ${label}`;
+}
+
+function updateTemperatureEvidence() {
+  state.oilTempC = oilTemperatureC();
+  const summary = $("tempSummary");
+  if (summary) summary.textContent = oilConditionSummary();
+}
+
+function temperatureRecommendationReason() {
+  const measured = oilTemperatureC();
+  const label = TEMP_LABELS[state.temp] || state.temp;
+  const evidence = Number.isFinite(measured) ? `실측 ${measured.toFixed(1)}°C · ` : "실측온도 없음 · ";
+  if (state.temp === "cold") return `${evidence}냉간 선택: 출발 지연·전체 사이클 증가·CREEP 저속 실속을 먼저 확인합니다. 온도만으로 MAX나 START SPEED를 올리지 않습니다.`;
+  if (state.temp === "hot") return `${evidence}고온 선택: 내부 누설·지령 0 후 추가 이동·정지 편차를 먼저 확인합니다. 온도만으로 감속값을 자동 변경하지 않습니다.`;
+  return `${evidence}${label} 선택: 반복 비교의 기준 조건으로 사용합니다. 온도만으로 파라미터를 자동 변경하지 않습니다.`;
+}
+
+function readP() {
+  return {
+    startCreep: g("START_CREEP_COUNT", 4550),
+    startDecel: g("START_DECEL_COUNTS", 3900),
+    accelSlope: g("ACCEL_SLOPE", 1.5),
+    decelSlope: g("DECEL_SLOPE", -1.37),
+    vstart: g("INDEX_SPEED_START", 3),
+    vmax: g("INDEX_SPEED_MAX", 3.13),
+    vmin: g("INDEX_SPEED_MIN", 2.5),
+    vhome: g("HOMING_SPEED", 1.27),
+    vmanual: g("FMM_REV_SPEED", 1.9),
+    target: g("TARGET_COUNTS", 5000),
+    polarity: g("POLARITY", 1.9),
+    indexPos: g("INDEX_POS", 4800),
+    indexWidth: g("INDEX_WIDTH", 80),
+    xMax: g("X_MAX", 5200),
+  };
+}
+
+function writeP(o) {
+  const map = {
+    START_CREEP_COUNT: o.startCreep,
+    START_DECEL_COUNTS: o.startDecel,
+    ACCEL_SLOPE: o.accelSlope,
+    DECEL_SLOPE: o.decelSlope,
+    INDEX_SPEED_START: o.vstart,
+    INDEX_SPEED_MAX: o.vmax,
+    INDEX_SPEED_MIN: o.vmin,
+    HOMING_SPEED: o.vhome,
+    FMM_REV_SPEED: o.vmanual,
+    TARGET_COUNTS: o.target,
+    POLARITY: o.polarity,
+    INDEX_POS: o.indexPos,
+    INDEX_WIDTH: o.indexWidth,
+    X_MAX: o.xMax,
+  };
+  for (const [k, v] of Object.entries(map)) {
+    if (v != null && $(k)) $(k).value = round(v);
+  }
+}
+
+function round(v) {
+  if (Math.abs(v - Math.round(v)) < 1e-9) return Math.round(v);
+  return Math.round(v * 1000) / 1000;
+}
+
+/* CSM profile evaluation at position */
+function inIndex(pos, p) {
+  const h = Math.max(1, p.indexWidth) / 2;
+  return pos >= p.indexPos - h && pos <= p.indexPos + h;
+}
+
+function deriveProfileLogic(p) {
+  const warnings = [];
+  const den = p.startCreep - p.startDecel;
+  const indexOffStart = p.indexPos - Math.max(1, p.indexWidth) / 2;
+  let accelByVoltage = Infinity;
+  if (p.vstart >= p.vmax) accelByVoltage = 0;
+  else if (p.target > 0 && p.accelSlope > 0) accelByVoltage = p.target * (p.vmax - p.vstart) / p.accelSlope;
+  const accelEnd = Math.max(0, Math.min(accelByVoltage, p.startDecel));
+
+  let creepEnter = Infinity;
+  if (den > 0 && p.decelSlope < 0 && p.vmax > p.vmin) {
+    creepEnter = p.startDecel + den * ((p.vmin - p.vmax) / p.decelSlope);
+  }
+  const hasCreepBeforeIndex = Number.isFinite(creepEnter) && creepEnter < indexOffStart;
+  const stopPos = indexOffStart;
+  const creepTravel = hasCreepBeforeIndex ? Math.max(0, stopPos - creepEnter) : 0;
+
+  if (!(p.target > 0)) warnings.push("TARGET COUNTS는 0보다 커야 합니다.");
+  if (!(p.accelSlope > 0)) warnings.push("ACCEL SLOPE가 0 이하이면 MAX 도달 계산을 할 수 없습니다.");
+  if (!(den > 0)) warnings.push("START CREEP COUNT는 START DECEL COUNTS보다 커야 합니다.");
+  if (!(p.decelSlope < 0)) warnings.push("DECEL SLOPE가 음수가 아니면 위치가 증가해도 감속하지 않습니다.");
+  if (!(p.vmax > p.vmin)) warnings.push("INDEX SPEED MAX는 MIN보다 커야 정상 감속 전환을 계산할 수 있습니다.");
+  if (!(indexOffStart > p.startDecel)) warnings.push("INDEX OFF 예상 위치가 감속 시작보다 앞입니다. INDEX 위치 시뮬 값을 확인하십시오.");
+  if (Number.isFinite(creepEnter) && !hasCreepBeforeIndex) warnings.push("MIN 도달 전에 INDEX가 먼저 전환되어 계산상 CREEP 이동구간이 없습니다.");
+
+  return {
+    den,
+    accelByVoltage,
+    accelEnd,
+    decelStart: p.startDecel,
+    creepEnter,
+    creepHoldV: Math.max(0, p.vmin),
+    indexOffStart,
+    stopPos,
+    creepTravel,
+    hasCreepBeforeIndex,
+    warnings,
+  };
+}
+
+function evalAt(pos, p, profileLogic) {
+  if (pos < 0) return { phase: "IDLE", v: 0 };
+  const logic = profileLogic || deriveProfileLogic(p);
+  if (pos >= logic.stopPos) return { phase: "STOP", v: 0 };
+  const va = p.target ? (pos / p.target) * p.accelSlope + p.vstart : p.vstart;
+  if (pos <= logic.decelStart) {
+    if (pos <= logic.accelEnd && va <= p.vmax) return { phase: "ACCEL", v: Math.max(0, va) };
+    return { phase: "FULL", v: p.vmax };
+  }
+  const vd = Math.abs(logic.den) < 1e-9
+    ? p.vmax
+    : p.vmax + ((pos - p.startDecel) / logic.den) * p.decelSlope;
+  if (!logic.hasCreepBeforeIndex || pos <= logic.creepEnter) return { phase: "DECEL", v: Math.max(0, vd) };
+  return { phase: "CREEP", v: logic.creepHoldV };
+}
+
+function updateLogicSummary(p, logic) {
+  const countText = (value) => Number.isFinite(value) ? `${Math.round(value).toLocaleString()} counts` : "계산 불가";
+  $("logicAccelEnd").textContent = countText(logic.accelEnd);
+  $("logicDecelStart").textContent = `>${Math.round(logic.decelStart).toLocaleString()} counts`;
+  $("logicCreepEnter").textContent = logic.hasCreepBeforeIndex ? `≈${Math.round(logic.creepEnter).toLocaleString()} counts` : "INDEX가 먼저 전환";
+  $("logicStopPos").textContent = `≈${Math.round(logic.stopPos).toLocaleString()} counts`;
+  $("logicCreepTravel").textContent = logic.hasCreepBeforeIndex ? `≈${Math.round(logic.creepTravel).toLocaleString()} counts` : "계산상 없음";
+  $("logicCreepEnter").classList.toggle("warn", !logic.hasCreepBeforeIndex || logic.warnings.length > 0);
+  const warning = $("logicWarning");
+  warning.textContent = logic.warnings.length ? `파라미터 관계 확인: ${logic.warnings.join(" / ")}` : "";
+  warning.classList.toggle("show", logic.warnings.length > 0);
+}
+
+function buildProfile(p, n = 900, profileLogic) {
+  const xs = [], vs = [], ph = [];
+  const logic = profileLogic || deriveProfileLogic(p);
+  for (let i = 0; i <= n; i++) {
+    const x = (i / n) * p.xMax;
+    const e = evalAt(x, p, logic);
+    xs.push(x); vs.push(e.v); ph.push(e.phase);
+  }
+  return { xs, vs, ph };
+}
+
+function prepareCanvas(canvas, fallbackW, fallbackH) {
+  const cssW = Math.max(1, Math.round(canvas.clientWidth || canvas.parentElement?.clientWidth || fallbackW));
+  const cssH = Math.max(1, Math.round(canvas.clientHeight || canvas.parentElement?.clientHeight || fallbackH));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const pixelW = Math.max(1, Math.round(cssW * dpr));
+  const pixelH = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== pixelW || canvas.height !== pixelH) {
+    canvas.width = pixelW;
+    canvas.height = pixelH;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { cssW, cssH, ctx };
+}
+
+/* ----- Draw static graph + live marker ----- */
+function drawGraph() {
+  const p = readP();
+  if (p.xMax < p.startCreep + 200) p.xMax = p.startCreep + 400;
+  const logic = deriveProfileLogic(p);
+  updateLogicSummary(p, logic);
+  const canvas = $("graphCv");
+  const { cssW, cssH, ctx } = prepareCanvas(canvas, 800, 360);
+  const sampleCount = Math.max(240, Math.min(900, Math.round(cssW * 1.5)));
+  const prof = buildProfile(p, sampleCount, logic);
+
+  const pad = { l: 52, r: 14, t: 56, b: 34 };
+  const W = cssW - pad.l - pad.r;
+  const H = cssH - pad.t - pad.b;
+
+  let yMax = Math.max(p.vmax, p.vstart, p.vmin, 0.5) * 1.15;
+  for (const v of prof.vs) yMax = Math.max(yMax, v * 1.05);
+  if (state.csvA?.overlay) {
+    for (const point of state.csvA.overlay) yMax = Math.max(yMax, Math.abs(point.cmd) * 1.08);
+  }
+  const yMin = 0;
+
+  const xOf = (x) => pad.l + (x / p.xMax) * W;
+  const yOf = (v) => pad.t + H - ((v - yMin) / (yMax - yMin)) * H;
+
+  ctx.fillStyle = "#080c12";
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  // phase bands
+  let i0 = 0;
+  const col = { ACCEL: "#3dd68c", FULL: "#f5c042", DECEL: "#ff6b7a", CREEP: "#36b9c9", STOP: "#444", IDLE: "#333" };
+  for (let i = 1; i <= prof.xs.length; i++) {
+    if (i < prof.xs.length && prof.ph[i] === prof.ph[i0]) continue;
+    const x0 = xOf(prof.xs[i0]);
+    const x1 = xOf(prof.xs[Math.min(i, prof.xs.length - 1)]);
+    ctx.fillStyle = (col[prof.ph[i0]] || "#333") + "22";
+    ctx.fillRect(x0, pad.t, Math.max(1, x1 - x0), H);
+    i0 = i;
+  }
+
+  // grid
+  ctx.strokeStyle = "#1a2836";
+  ctx.fillStyle = "#6d8aa8";
+  ctx.font = "12px ui-monospace, Menlo, sans-serif";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 5; i++) {
+    const v = (yMax * i) / 5;
+    const y = yOf(v);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + W, y); ctx.stroke();
+    ctx.fillText(v.toFixed(2), 4, y + 3);
+  }
+  for (let i = 0; i <= 8; i++) {
+    const x = (p.xMax * i) / 8;
+    const xp = xOf(x);
+    ctx.beginPath(); ctx.moveTo(xp, pad.t); ctx.lineTo(xp, pad.t + H); ctx.stroke();
+    ctx.fillText(String(Math.round(x)), xp - 10, cssH - 8);
+  }
+
+  // markers
+  function vline(x, c, lab, yo) {
+    if (x < 0 || x > p.xMax) return;
+    const xp = xOf(x);
+    ctx.strokeStyle = c;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(xp, pad.t); ctx.lineTo(xp, pad.t + H); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = c;
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText(lab, Math.min(xp + 3, pad.l + W - 70), pad.t + 10 + (yo || 0));
+  }
+  vline(p.startDecel, "#ff6b7a", "START DECEL", 0);
+  vline(p.startCreep, "#7fdbff", "START CREEP (식 기준)", 17);
+  if (logic.hasCreepBeforeIndex) vline(logic.creepEnter, "#36b9c9", "CREEP 진입 ≈", 34);
+  vline(logic.stopPos, "#c792ea", "INDEX OFF · STOP", logic.hasCreepBeforeIndex ? 51 : 34);
+
+  // profile line
+  ctx.strokeStyle = "#4aa3ff";
+  ctx.lineWidth = 2.4;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  for (let i = 0; i < prof.xs.length; i++) {
+    const x = xOf(prof.xs[i]), y = yOf(prof.vs[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // measured Studio 5000 CSV overlay (position vs command voltage)
+  if (state.csvA?.overlay?.length > 1) {
+    ctx.strokeStyle = "#f5c042";
+    ctx.lineWidth = 1.6;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    let started = false;
+    for (const point of state.csvA.overlay) {
+      if (!Number.isFinite(point.pos) || !Number.isFinite(point.cmd)) continue;
+      const x = xOf(Math.max(0, Math.min(point.pos, p.xMax)));
+      const y = yOf(Math.abs(point.cmd));
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // trail during sim
+  if (state.trail.length > 1) {
+    ctx.strokeStyle = "#3dd68c";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < state.trail.length; i++) {
+      const t = state.trail[i];
+      const x = xOf(Math.min(t.pos, p.xMax));
+      const y = yOf(t.v);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // live marker
+  if (state.running || state.pos > 0) {
+    const e = evalAt(state.pos, p);
+    const mx = xOf(Math.min(state.pos, p.xMax));
+    const my = yOf(state.v || e.v);
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(mx, pad.t); ctx.lineTo(mx, pad.t + H); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(mx, my, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#4aa3ff";
+    ctx.beginPath(); ctx.arc(mx, my, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = "#8b9fb5";
+  ctx.font = "14px sans-serif";
+  ctx.fillText("CSM 지령 V  vs  위치 counts", pad.l, 18);
+
+  // phase strip
+  const counts = { ACCEL: 0, FULL: 0, DECEL: 0, CREEP: 0, STOP: 0 };
+  for (const ph of prof.ph) if (counts[ph] != null) counts[ph]++;
+  const tot = prof.ph.length || 1;
+  $("phaseStrip").innerHTML = ["ACCEL", "FULL", "DECEL", "CREEP", "STOP"].map((n) => {
+    const pct = (100 * counts[n]) / tot;
+    if (pct < 0.3) return "";
+    return `<span style="width:${pct}%;background:${col[n]}">${pct > 7 ? n : ""}</span>`;
+  }).join("");
+
+  canvas._plot = { p, prof, xOf, yOf, pad, W, H, yMax, cssW };
+
+  // expert formula
+  if (state.tab === "expert") {
+    $("expertHelp").textContent =
+`ACCEL: v = pos/${p.target} × ${p.accelSlope} + ${p.vstart}
+DECEL: v = ${p.vmax} + (pos−${p.startDecel})/(${p.startCreep}−${p.startDecel}) × ${p.decelSlope}
+상태: ACCEL → FULL → DECEL → CREEP → INDEX OFF에서 지령 0
+계산 전환: MAX≈${Math.round(logic.accelEnd)} · DECEL>${Math.round(logic.decelStart)} · CREEP≈${Number.isFinite(logic.creepEnter) ? Math.round(logic.creepEnter) : "불가"} · STOP≈${Math.round(logic.stopPos)} counts
+주의: START CREEP는 상태 전환 위치가 아니라 감속식 기준값
+호밍: v = ${p.vhome} × ${p.polarity} = ${round(p.vhome * p.polarity)}${logic.warnings.length ? `\n검증: ${logic.warnings.join(" / ")}` : ""}`;
+  }
+
+  drawChain(p);
+}
+
+function drawChain(p) {
+  const canvas = $("chainCv");
+  const { cssW: w, cssH: h, ctx } = prepareCanvas(canvas, 800, 88);
+
+  ctx.fillStyle = "#0c1016";
+  ctx.fillRect(0, 0, w, h);
+
+  const pad = 40;
+  const trackW = w - pad * 2;
+  const xMax = p.xMax;
+  const toX = (c) => pad + (Math.min(c, xMax) / xMax) * trackW;
+
+  // track
+  ctx.strokeStyle = "#2a3a4a";
+  ctx.lineWidth = 10;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(pad, h / 2);
+  ctx.lineTo(pad + trackW, h / 2);
+  ctx.stroke();
+
+  // markers
+  function mark(c, color, lab) {
+    const x = toX(c);
+    ctx.fillStyle = color;
+    ctx.fillRect(x - 1, h / 2 - 18, 2, 36);
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(lab, x - 12, 14);
+  }
+  const logic = deriveProfileLogic(p);
+  mark(p.startDecel, "#ff6b7a", "DECEL");
+  if (logic.hasCreepBeforeIndex) mark(logic.creepEnter, "#36b9c9", "CREEP");
+  mark(logic.stopPos, "#c792ea", "IDX OFF");
+
+  // chain links decoration
+  const link = 18;
+  const offset = (state.pos * 0.15) % link;
+  ctx.strokeStyle = "#3a5060";
+  ctx.lineWidth = 2;
+  for (let x = pad - offset; x < pad + trackW; x += link) {
+    ctx.strokeRect(x, h / 2 - 6, link - 4, 12);
+  }
+
+  // carrier
+  const cx = toX(state.pos);
+  ctx.fillStyle = state.running ? "#3dd68c" : "#4aa3ff";
+  ctx.beginPath();
+  ctx.moveTo(cx - 14, h / 2 - 14);
+  ctx.lineTo(cx + 14, h / 2 - 14);
+  ctx.lineTo(cx + 14, h / 2 + 14);
+  ctx.lineTo(cx - 14, h / 2 + 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#0c1016";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText("SC2", cx - 12, h / 2 + 4);
+
+  // index flag window
+  const half = p.indexWidth / 2;
+  const x1 = toX(p.indexPos - half);
+  const x2 = toX(p.indexPos + half);
+  ctx.fillStyle = "#c792ea33";
+  ctx.fillRect(x1, h / 2 + 16, Math.max(2, x2 - x1), 6);
+}
+
+/* ----- 1-cycle simulation -----
+ * pos advances with "speed" proportional to command voltage.
+ * Scale: at V=3.13, traverse ~ counts roughly so full cycle ~ few seconds * mul
+ * counts/sec = k * V   with k chosen so vmax covers ~ xMax in ~4s at 1x
+ */
+function startCycle() {
+  // 엔코더 0부터 자동 증가 → CSM 위치식 지령 V로 구간 진행
+  if (state.raf) cancelAnimationFrame(state.raf);
+  state.raf = 0;
+  if (state.timer) clearInterval(state.timer);
+
+  state.running = true;
+  state.paused = false;
+  state.pos = 0;
+  state.v = 0;
+  state.phase = "ACCEL";
+  state.trail = [];
+  state.lastT = performance.now();
+  state.lastRenderAt = 0;
+  state.finishHold = 0;
+  state.cycleElapsed = 0;
+
+  $("btnCycle").disabled = true;
+  $("btnPause").disabled = false;
+  $("btnStop").disabled = false;
+  $("btnPause").textContent = "일시정지";
+  updateStatus();
+  drawGraph();
+
+  // 계산은 고정 30 Hz, 화면은 rAF 최대 20 fps로 분리하여 모바일 부하를 낮춤.
+  state.timer = setInterval(() => {
+    if (state.running && !state.paused) {
+      stepSim(1 / 30, false);
+      scheduleSimRender();
+    }
+  }, 33);
+}
+
+function stopCycle(resetPos) {
+  state.running = false;
+  state.paused = false;
+  if (state.raf) cancelAnimationFrame(state.raf);
+  if (state.timer) { clearInterval(state.timer); state.timer = 0; }
+  state.raf = 0;
+  if (resetPos) {
+    state.pos = 0;
+    state.v = 0;
+    state.phase = "IDLE";
+    state.trail = [];
+  }
+  $("btnCycle").disabled = false;
+  $("btnPause").disabled = true;
+  $("btnStop").disabled = true;
+  updateStatus();
+  drawGraph();
+}
+
+/** 지령 전압(V) → 엔코더 증가량(counts/s). CSM 위치식에 맞춰 곡선을 진행함 */
+function encoderRate(p, cmdV) {
+  const span = Math.max(p.startCreep, p.indexPos, p.target, p.xMax, 1000);
+  // 1× 배속에서 대략 span 을 3~4초에 통과
+  const countsPerSecAtVmax = span / 3.2;
+  const vmax = Math.max(p.vmax, p.vstart, 0.5);
+  return (countsPerSecAtVmax / vmax) * Math.max(cmdV, 0);
+}
+
+function estimateCycleSeconds(p) {
+  let pos = 0;
+  let elapsed = 0;
+  const dt = 1 / 120;
+  while (elapsed < 60) {
+    const e = evalAt(pos, p);
+    let cmdV = e.v;
+    let phase = e.phase;
+    if (pos < 10 && cmdV < 0.05) {
+      cmdV = Math.max(p.vstart, 0.2);
+      phase = "ACCEL";
+    }
+    const finished =
+      (phase === "STOP" && pos >= p.startDecel) ||
+      pos >= p.indexPos + Math.max(p.indexWidth, 1) * 0.5;
+    if (finished && pos >= Math.min(p.startDecel, p.indexPos) * 0.5) return elapsed;
+    const stopPos = deriveProfileLogic(p).stopPos;
+    pos = Math.min(pos + encoderRate(p, cmdV) * dt, stopPos);
+    elapsed += dt;
+  }
+  return NaN;
+}
+
+function updateCycleTimeDisplay() {
+  const el = $("cycleTimeKpi");
+  if (!el) return;
+  if (state.running) {
+    const expected = estimateCycleSeconds(readP());
+    el.textContent = `진행 ${state.cycleElapsed.toFixed(2)} / 예상 ${Number.isFinite(expected) ? expected.toFixed(2) : "-"} s`;
+    return;
+  }
+  const measuredMax = state.csvA?.metrics?.maxCycleSec;
+  if (measuredMax > 0) {
+    el.textContent = `CSV 실측 최대 ${measuredMax.toFixed(2)} s`;
+    return;
+  }
+  if (state.simCycleCount > 0) {
+    el.textContent = `시뮬 최대 ${state.simCycleMax.toFixed(2)} s · ${state.simCycleCount}회`;
+    return;
+  }
+  const expected = estimateCycleSeconds(readP());
+  el.textContent = Number.isFinite(expected) ? `시뮬 예상 ${expected.toFixed(2)} s` : "계산 불가";
+}
+
+function stepSim(dt, renderNow = true) {
+  if (!state.running || state.paused) return;
+  if (dt < 0.001) dt = 0.001;
+  if (dt > 0.08) dt = 0.08;
+
+  const p = readP();
+  const mul = parseFloat($("speedMul").value) || 1;
+  state.cycleElapsed += dt * mul;
+
+  // 현재 엔코더 위치에서의 CSM 지령 (HMI 파라미터 식)
+  const e = evalAt(state.pos, p);
+  let cmdV = e.v;
+  let phase = e.phase;
+
+  // 출발 보장: pos=0 근처에서 지령이 0이면 START 전압으로 강제 기동
+  if (state.pos < 10 && cmdV < 0.05) {
+    cmdV = Math.max(p.vstart, 0.2);
+    phase = "ACCEL";
+  }
+
+  // 사이클 종료: CREEP 유지 후 INDEX 센서 OFF 위치에서 지령 0
+  const finished =
+    (phase === "STOP" && state.pos >= p.startDecel) ||
+    state.pos >= p.indexPos + Math.max(p.indexWidth, 1) * 0.5;
+
+  if (finished && state.pos >= Math.min(p.startDecel, p.indexPos) * 0.5) {
+    if (state.finishHold === 0) {
+      state.simCycleMax = Math.max(state.simCycleMax, state.cycleElapsed);
+      state.simCycleCount += 1;
+    }
+    state.v = 0;
+    state.phase = "STOP";
+    state.trail.push({ pos: state.pos, v: 0, phase: "STOP" });
+    state.finishHold += dt;
+    updateStatus();
+    drawGraph();
+    // 짧게 정지 표시 후 완료
+    if (state.finishHold > 0.25) {
+      state.phase = "DONE";
+      stopCycle(false);
+      updateStatus();
+    }
+    return;
+  }
+
+  // ★ 핵심: 엔코더(ic_conveyor_position) 자동 증가
+  const dCounts = encoderRate(p, cmdV) * dt * mul;
+  const stopPos = deriveProfileLogic(p).stopPos;
+  state.pos = Math.min(state.pos + dCounts, stopPos);
+  state.v = cmdV;
+  state.phase = phase;
+
+  // 안전 상한
+  const lim = Math.max(p.xMax, p.indexPos + 200, p.startCreep + 200);
+  if (state.pos > lim) state.pos = lim;
+
+  state.trail.push({ pos: state.pos, v: state.v, phase: state.phase });
+  if (state.trail.length > 2500) state.trail.shift();
+
+  if (renderNow) {
+    updateStatus();
+    drawGraph();
+  }
+}
+
+function scheduleSimRender(force = false) {
+  if (state.raf || (!state.running && !force)) return;
+  state.raf = requestAnimationFrame((timestamp) => {
+    state.raf = 0;
+    if (!force && timestamp - state.lastRenderAt < 50) return;
+    state.lastRenderAt = timestamp;
+    updateStatus();
+    drawGraph();
+  });
+}
+
+function updateStatus() {
+  const mode = state.running ? (state.paused ? "일시정지" : "운전중") : (state.phase === "DONE" ? "완료" : "대기");
+  $("runStatus").innerHTML =
+    `${mode} · 엔코더 <b>${state.pos.toFixed(0)}</b> counts · 지령 <b>${state.v.toFixed(2)}</b> V · 구간 <b id="phaseLab">${state.phase}</b>`;
+  const lab = $("phaseLab");
+  if (lab) {
+    const c = { ACCEL: "#3dd68c", FULL: "#f5c042", DECEL: "#ff6b7a", CREEP: "#36b9c9", STOP: "#aaa", DONE: "#7fdbff", IDLE: "#889" };
+    lab.style.color = c[state.phase] || "#fff";
+  }
+  updateCycleTimeDisplay();
+}
+
+/* ----- Conservative recommendation candidate ----- */
+function recommend() {
+  const cur = readP();
+  const probs = state.problems;
+  const temp = state.temp;
+  const aMetric = state.csvA?.metrics || null;
+  const bMetric = state.csvB?.metrics || null;
+  const currentLogic = deriveProfileLogic(cur);
+  const span = Math.max(100, cur.startCreep - cur.startDecel);
+  const rec = { ...cur };
+  const why = [];
+  let decelShift = 0;
+  let diagnosisFirst = false;
+
+  why.push(temperatureRecommendationReason());
+  if (probs.has("sheetSurge")) {
+    decelShift -= Math.max(40, Math.round(span * 0.08));
+    why.push("sheet 쏠림: 첫 시험은 MAX와 SLOPE를 유지하고 START DECEL만 한 단계 앞당김");
+  }
+  if (probs.has("hard")) {
+    decelShift -= Math.max(30, Math.round(span * 0.06));
+    why.push("충격 정지: DECEL SLOPE는 유지하고 START DECEL만 앞당겨 감속식의 위치당 변화량을 완화");
+  }
+  if (probs.has("startShock")) {
+    rec.vstart = cur.vstart * 0.97;
+    why.push("출발 충격: 첫 시험은 ACCEL SLOPE를 유지하고 START SPEED만 3% 낮춤");
+  }
+  if (probs.has("late") || probs.has("stopDrift")) {
+    decelShift -= Math.max(30, Math.round(span * 0.05));
+    why.push("INDEX 센서 OFF 정지점을 지난 추가 이동/지령 0 후 추가 이동: START DECEL을 앞당기는 방향");
+  }
+  if (probs.has("early")) {
+    diagnosisFirst = true;
+    why.push("INDEX 기준 정지점 전에 멈춤: 정상 논리는 INDEX OFF까지 CREEP를 유지하므로 센서 조기 OFF와 저속 실속을 먼저 구분하고 숫자는 자동 변경하지 않음");
+  }
+  if (probs.has("home")) {
+    rec.vhome = cur.vhome * 0.95;
+    why.push("Homing 중 INDEX 센서를 지나침: 자동 프로파일은 건드리지 않고 HOMING SPEED만 5% 낮춤");
+  }
+  if (probs.has("slow")) {
+    why.push("전체 느림: 실측 사이클과 유압 상태 없이 MAX를 자동으로 올리지 않음");
+  }
+  if (["pulse", "cavitation", "chainShock", "skew", "sensor", "directionDiff", "loadDiff", "cycleVariation"].some((key) => probs.has(key))) {
+    diagnosisFirst = true;
+    why.push("반복 편차·소음·비틀림·센서 불안정: 고정 파라미터보다 기계·유압·센서 원인 확인이 우선");
+  }
+  if (aMetric) {
+    why.push(`Trend A 측정: ${aMetric.cycleCount || 0}사이클 · 중앙 ${aMetric.medianCycleSec ? aMetric.medianCycleSec.toFixed(2) + " s" : "계산 불가"} · 정지 후 추가 이동 중앙 ${Math.round(aMetric.overrunCounts || 0)} counts`);
+    if ((probs.has("sheetSurge") || probs.has("late") || probs.has("stopDrift")) && aMetric.overrunCounts > 0) {
+      const measuredAdvance = Math.min(80, Math.max(10, Math.round(aMetric.overrunCounts * 0.5)));
+      decelShift -= measuredAdvance;
+      why.push(`Trend A 보정: 선택한 정지 증상과 추가 이동이 함께 있어 START DECEL 앞당김에 ${measuredAdvance} counts 추가`);
+    }
+    if (aMetric.cycleVariationPct > 10) {
+      diagnosisFirst = true;
+      why.push(`Trend A 경고: 사이클시간 편차 ${aMetric.cycleVariationPct.toFixed(1)}% → 고정 파라미터 변경보다 유압·부하 변동 확인 우선`);
+    }
+    if (aMetric.creepStartPos > 0 && currentLogic.hasCreepBeforeIndex) {
+      const error = aMetric.creepStartPos - currentLogic.creepEnter;
+      why.push(`논리 대조: CSV CREEP 진입 중앙 ${Math.round(aMetric.creepStartPos)} counts · 계산 ${Math.round(currentLogic.creepEnter)} counts · 차이 ${Math.round(error)} counts`);
+      if (Math.abs(error) > Math.max(50, span * 0.1)) {
+        diagnosisFirst = true;
+        why.push("CSV와 계산 CREEP 위치 차이가 커서 태그·스캔·실제 HMI값 확인 전 DECEL SLOPE 자동 변경 금지");
+      }
+    }
+  } else {
+    why.push("Trend A 미입력: 현재 운전값을 기준으로 한 작은 화면 시험 후보이며 실제 가동응답 기반 값은 아님");
+  }
+  if (bMetric) {
+    const parts = [];
+    if (Number.isFinite(bMetric.startDelaySec)) parts.push(`출발허가→운전 ${bMetric.startDelaySec.toFixed(3)} s`);
+    if (Number.isFinite(bMetric.stopConfirmSec)) parts.push(`운전종료→정지확인 ${bMetric.stopConfirmSec.toFixed(3)} s`);
+    if (Number.isFinite(bMetric.homingSec)) parts.push(`호밍 ${bMetric.homingSec.toFixed(3)} s`);
+    why.push(`Trend B 상태 타이밍: ${parts.length ? parts.join(" · ") : "완성된 전환쌍 없음"}`);
+  }
+  if (!probs.size) why.push("선택 증상 없음: 장기간 사용 중인 현재값을 그대로 유지. 자동으로 공식을 예쁘게 맞추지 않음");
+
+  const maxShift = Math.max(60, Math.min(150, Math.round(span * 0.20)));
+  decelShift = Math.max(-maxShift, Math.min(maxShift, decelShift));
+  rec.startDecel = Math.max(200, Math.min(cur.startCreep - 100, Math.round(cur.startDecel + decelShift)));
+  rec.startCreep = cur.startCreep;
+  rec.decelSlope = cur.decelSlope;
+  rec.vmin = cur.vmin;
+  rec.accelSlope = round(Math.max(0.05, rec.accelSlope));
+  rec.vstart = round(rec.vstart);
+  rec.vmax = round(rec.vmax);
+  rec.vhome = round(rec.vhome);
+  state.rec = rec;
+  const recommendedLogic = deriveProfileLogic(state.rec);
+
+  const rows = [
+    ["START DECEL COUNTS", cur.startDecel, state.rec.startDecel],
+    ["START CREEP COUNT", cur.startCreep, state.rec.startCreep],
+    ["ACCEL SLOPE", cur.accelSlope, state.rec.accelSlope],
+    ["DECEL SLOPE", cur.decelSlope, state.rec.decelSlope],
+    ["INDEX SPEED START", cur.vstart, state.rec.vstart],
+    ["INDEX SPEED MAX", cur.vmax, state.rec.vmax],
+    ["INDEX SPEED MIN", cur.vmin, state.rec.vmin],
+    ["HOMING SPEED", cur.vhome, state.rec.vhome],
+  ];
+  $("recTable").innerHTML = `<tr><th>항목</th><th>현재</th><th>화면 시험 후보</th></tr>` + rows.map(([n, a, b]) => {
+    const changed = Math.abs(Number(a) - Number(b)) > 1e-9;
+    return `<tr><td>${n}</td><td style="color:#889">${round(a)}</td><td style="color:${changed ? "#7fdbff" : "#77838c"}">${round(b)}${changed ? " ◀" : " · 유지"}</td></tr>`;
+  }).join("");
+  const evidence = state.csvA
+    ? (state.csvB && datasetsOverlap(state.csvA, state.csvB) > 0 ? "Trend A+B 실측 근거를 포함한 추천 후보" : "Trend A 실측 근거를 포함한 추천 후보")
+    : "조업 증상만 반영한 추천 가설";
+  const hasChanges = rows.some(([, a, b]) => Math.abs(Number(a) - Number(b)) > 1e-9);
+  const logicCompare = `CREEP 진입 계산 ${currentLogic.hasCreepBeforeIndex ? Math.round(currentLogic.creepEnter) + " counts" : "INDEX 우선"} → ${recommendedLogic.hasCreepBeforeIndex ? Math.round(recommendedLogic.creepEnter) + " counts" : "INDEX 우선"}, CREEP 이동 ${Math.round(currentLogic.creepTravel)} → ${Math.round(recommendedLogic.creepTravel)} counts`;
+  $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 기계·유압·센서 확인을 먼저 수행하십시오." : ""}`;
+  $("recBox").classList.add("show");
+  $("btnApplyRec").disabled = !hasChanges || recommendedLogic.warnings.length > 0;
+}
+
+/* ----- Physical-risk status: only calculate when evidence exists ----- */
+function updatePhysics() {
+  const massMin = g("MASS_MIN", 120);
+  const massMax = g("MASS_MAX", 150);
+  const countsPerMm = g("COUNTS_PER_MM", 0);
+  const mu = g("FRICTION_MU", 0);
+  const lagMs = g("HYD_LAG_MS", 0);
+  const manualOverrun = g("OVERRUN_MM", 0);
+  const metric = state.csvA?.metrics || null;
+  const lines = [`확정 입력: sheet ${round(massMin)}~${round(massMax)} kg · 평지`];
+  let kpi = "실측 CSV 전 판단 보류";
+  let kpiClass = "warn";
+
+  if (!metric) {
+    lines.push("SC2 Trend CSV가 없어 실제 유압 응답·감속도는 아직 계산하지 않습니다.");
+  } else if (!(countsPerMm > 0)) {
+    lines.push(`CSV 근사 최대 감속(약 100 ms 이동창): ${metric.maxDecelCounts ? Math.round(metric.maxDecelCounts).toLocaleString() : "계산 불가"} counts/s²`);
+    lines.push("counts/mm가 없어 m/s²와 쏠림 한계로 변환하지 않습니다.");
+    kpi = "counts/mm 입력 필요";
+  } else if (metric.maxDecelCounts > 0) {
+    const decel = metric.maxDecelCounts / countsPerMm / 1000;
+    const requiredMu = decel / 9.80665;
+    const forceMin = massMin * decel;
+    const forceMax = massMax * decel;
+    lines.push(`CSV 근사 최대 감속: ${decel.toFixed(3)} m/s² · 관성력 ${Math.round(forceMin)}~${Math.round(forceMax)} N`);
+    lines.push(`평지에서 미끄러지지 않기 위한 이론상 최소 정지마찰계수: μ ${requiredMu.toFixed(3)} 이상`);
+    if (mu > 0) {
+      const ratio = decel / (mu * 9.80665);
+      if (ratio >= 1) {
+        kpi = `쏠림 가능성 높음 · 한계의 ${ratio.toFixed(2)}배`;
+        kpiClass = "warn";
+        lines.push(`입력 μ ${mu} 기준으로 감속도가 마찰 한계를 넘습니다. 현장 확인이 필요합니다.`);
+      } else if (ratio >= 0.7) {
+        kpi = `쏠림 여유 작음 · 한계의 ${ratio.toFixed(2)}배`;
+        kpiClass = "warn";
+        lines.push(`입력 μ ${mu} 기준으로 마찰 한계에 가깝습니다.`);
+      } else {
+        kpi = `계산상 여유 있음 · 한계의 ${ratio.toFixed(2)}배`;
+        kpiClass = "good";
+        lines.push(`입력 μ ${mu} 기준 이론값은 한계 아래입니다. 오염·물기·오일 조건은 별도 확인합니다.`);
+      }
+    } else {
+      kpi = `필요 마찰계수 μ ${requiredMu.toFixed(3)}`;
+      lines.push("실제 접촉면 μ가 없어 최종 위험등급은 보류합니다.");
+    }
+  } else {
+    lines.push("CSV에서 안정적인 위치 감속도를 계산하지 못했습니다. 태그와 사이클 구간을 확인하십시오.");
+  }
+
+  let overrunMm = manualOverrun;
+  if (!(overrunMm > 0) && metric?.overrunCounts > 0 && countsPerMm > 0) overrunMm = metric.overrunCounts / countsPerMm;
+  if (overrunMm > 0) lines.push(`정지 지령 후 밀림: 약 ${overrunMm.toFixed(1)} mm`);
+  if (lagMs > 0) lines.push(`입력 유압 응답지연: ${Math.round(lagMs)} ms · 압력/유량 태그 없이 원인 확정 불가`);
+
+  $("physicsResult").innerHTML = lines.join("<br>");
+  const risk = $("riskKpi");
+  risk.textContent = kpi;
+  risk.className = kpiClass;
+}
+
+/* ----- Help page ----- */
+function renderHelp() {
+  const problemItems = Object.values(PROBLEM_INFO).map((item) =>
+    `<article class="help-item"><h3>${item.label}</h3><p><b>가능한 이유:</b> ${item.cause}</p><p><b>추천에 미치는 영향:</b> ${item.action}</p></article>`
+  ).join("");
+  const tempItem = `<article class="help-item"><h3>${TEMP_HELP_INFO.label}</h3><p><b>가능한 이유:</b> ${TEMP_HELP_INFO.cause}</p><p><b>추천에 미치는 영향:</b> ${TEMP_HELP_INFO.action}</p></article>`;
+  $("helpList").innerHTML = problemItems + tempItem;
+}
+
+/* ----- Studio 5000 Trend CSV parser ----- */
+function parseCsvLine(line) {
+  const out = [];
+  let value = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') { value += '"'; i++; }
+      else quoted = !quoted;
+    } else if (ch === "," && !quoted) {
+      out.push(value);
+      value = "";
+    } else value += ch;
+  }
+  out.push(value);
+  return out;
+}
+
+function trendTime(date, time) {
+  if (!date || !time) return NaN;
+  const normalized = String(time).trim().replace(";", ".");
+  return Date.parse(`${String(date).trim()}T${normalized}`);
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function percentile(values, ratio) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
+  return sorted[index];
+}
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+const TREND_COLUMNS = {
+  A: {
+    pos: "ic_conveyor_position",
+    cmd: "var_volts_velocity",
+    ao: "oa_conveyor",
+    index: "i_conveyor_index",
+    accel: "state_accel_001.x",
+    full: "state_full_speed_001.x",
+    decel: "state_decel_001.x",
+    creep: "state_creep_in_001.x",
+  },
+  B: {
+    homing: "ui_o_homing_in_progress",
+    homed: "ui_o_conveyor_homed",
+    homeInterlock: "interlock_home",
+    stoppedInterlock: "interlock_stopped",
+    permitStart: "permit_start",
+    idle: "state_idle_001.x",
+    running: "ui_o_running",
+  },
+};
+
+function pairEventDelay(fromTimes, toTimes, maxWindowMs = 15000) {
+  const delays = [];
+  let j = 0;
+  for (const from of fromTimes) {
+    while (j < toTimes.length && toTimes[j] < from) j++;
+    if (j < toTimes.length && toTimes[j] - from <= maxWindowMs) {
+      delays.push((toTimes[j] - from) / 1000);
+      j++;
+    }
+  }
+  return delays.length ? median(delays) : NaN;
+}
+
+function datasetsOverlap(a, b) {
+  if (!a || !b) return 0;
+  return Math.max(0, Math.min(a.lastT, b.lastT) - Math.max(a.firstT, b.firstT)) / 1000;
+}
+
+function deriveCsvMetrics(cycleDurations, overruns, observed, cycles, kinematics) {
+  const minCycleSec = cycleDurations.length ? Math.min(...cycleDurations) : 0;
+  const maxCycleSec = cycleDurations.length ? Math.max(...cycleDurations) : 0;
+  const medianCycleSec = median(cycleDurations);
+  const p95CycleSec = percentile(cycleDurations, 0.95);
+  const deviations = cycleDurations.map((value) => Math.abs(value - medianCycleSec));
+  const mad = median(deviations);
+  const slowLimitSec = medianCycleSec + Math.max(0.20, mad * 3);
+  const slowCycles = cycles.filter((cycle) => cycle.durationSec > slowLimitSec).sort((a, b) => b.durationSec - a.durationSec);
+  return {
+    maxDecelCounts: kinematics.maxDecelCounts,
+    maxSpeedCounts: kinematics.maxSpeedCounts,
+    cycleCount: cycleDurations.length,
+    medianCycleSec,
+    minCycleSec,
+    maxCycleSec,
+    p95CycleSec,
+    slowLimitSec,
+    slowCycleCount: slowCycles.length,
+    slowCycles: slowCycles.slice(0, 5),
+    cycleVariationPct: medianCycleSec > 0 ? ((maxCycleSec - minCycleSec) / medianCycleSec) * 100 : 0,
+    overrunCounts: median(overruns),
+    decelStartPos: median(observed.decelStart),
+    creepStartPos: median(observed.creepStart),
+    stopPos: median(observed.stopPos),
+  };
+}
+
+function deriveBMetrics(events) {
+  return {
+    permitStarts: events.permitStart.rise.length,
+    runningStarts: events.running.rise.length,
+    homingStarts: events.homing.rise.length,
+    stoppedConfirms: events.stoppedInterlock.rise.length,
+    startDelaySec: pairEventDelay(events.permitStart.rise, events.running.rise),
+    stopConfirmSec: pairEventDelay(events.running.fall, events.stoppedInterlock.rise),
+    homingSec: pairEventDelay(events.homing.rise, events.homed.rise, 60000),
+  };
+}
+
+async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
+  const lines = text.split(/\r?\n/);
+  let sampleMs = 0;
+  let header = null;
+  let headerLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith("Sample Period:")) {
+      const match = lines[i].match(/,\s*"?([\d.]+)/);
+      if (match) sampleMs = parseFloat(match[1]);
+    }
+    if (lines[i].startsWith("Header:")) {
+      header = parseCsvLine(lines[i]);
+      headerLine = i;
+      break;
+    }
+  }
+  if (!header || headerLine < 0) throw new Error("Studio 5000 Header: 행을 찾지 못했습니다.");
+
+  const lower = header.map((name) => String(name).trim().toLowerCase());
+  const findIndex = (needle) => lower.findIndex((name) => name.includes(needle));
+  const dateIdx = findIndex("date");
+  const timeIdx = findIndex("time");
+  const definitions = TREND_COLUMNS[setType];
+  const indices = Object.fromEntries(Object.entries(definitions).map(([key, needle]) => [key, findIndex(needle)]));
+  const foundKeys = Object.keys(indices).filter((key) => indices[key] >= 0);
+  const missingKeys = Object.keys(indices).filter((key) => indices[key] < 0);
+  if (setType === "A" && (indices.pos < 0 || indices.cmd < 0)) throw new Error("Trend A 필수 태그인 ic_conveyor_position과 var_volts_velocity를 모두 찾지 못했습니다.");
+  if (setType === "B" && !foundKeys.length) throw new Error("Trend B 상태 태그를 찾지 못했습니다. Trend B 태그 구성을 확인하십시오.");
+  const stride = Math.max(1, Math.ceil((lines.length - headerLine) / 5000));
+  const rows = [];
+  const cycleDurations = [];
+  const overruns = [];
+  const cycles = [];
+  const observed = { decelStart: [], creepStart: [], stopPos: [] };
+  const events = Object.fromEntries(Object.keys(definitions).map((key) => [key, { rise: [], fall: [] }]));
+  const previous = {};
+  const positionWindow = [];
+  const velocityWindow = [];
+  const kinematics = { maxDecelCounts: 0, maxSpeedCounts: 0 };
+  let sampleCount = 0;
+  let firstT = NaN, lastT = NaN, maxCmd = 0;
+  let wasMoving = false, moveStart = NaN;
+  let pendingStop = null;
+  let activeCycle = null;
+
+  for (let i = headerLine + 1; i < lines.length; i++) {
+    if ((i - headerLine) % 5000 === 0) {
+      if (onProgress) onProgress(Math.min(99, Math.round((i / Math.max(lines.length - 1, 1)) * 100)));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    if (!lines[i].startsWith("Data,")) continue;
+    const fields = parseCsvLine(lines[i]);
+    const t = trendTime(fields[dateIdx], fields[timeIdx]);
+    if (!Number.isFinite(t)) continue;
+    const values = {};
+    for (const key of Object.keys(definitions)) values[key] = indices[key] >= 0 ? parseFloat(fields[indices[key]]) : NaN;
+    const { pos, cmd } = values;
+    if (!Number.isFinite(firstT)) firstT = t;
+    lastT = t;
+    sampleCount++;
+    if (Number.isFinite(cmd)) maxCmd = Math.max(maxCmd, Math.abs(cmd));
+
+    const moving = setType === "A" && Number.isFinite(cmd) ? Math.abs(cmd) > 0.05 : false;
+    if (setType === "A" && moving && !wasMoving) {
+      if (pendingStop) {
+        const overrun = Math.max(0, pendingStop.max - pendingStop.base);
+        overruns.push(overrun);
+        pendingStop.cycle.overrunCounts = overrun;
+        pendingStop = null;
+      }
+      moveStart = t;
+      activeCycle = {
+        number: cycles.length + 1,
+        startT: t,
+        startPos: Number.isFinite(pos) ? pos : NaN,
+        peakCmd: Math.abs(cmd || 0),
+        decelStartPos: NaN,
+        creepStartPos: NaN,
+        stopPos: NaN,
+        overrunCounts: 0,
+      };
+    }
+
+    let changed = false;
+    for (const key of Object.keys(definitions)) {
+      const value = values[key];
+      if (!Number.isFinite(value)) continue;
+      const on = value > 0.5;
+      if (key in previous && on !== previous[key]) {
+        const bucket = on ? events[key].rise : events[key].fall;
+        if (bucket.length < 5000) bucket.push(t);
+        changed = true;
+        if (setType === "A" && on && Number.isFinite(pos)) {
+          if (key === "decel") {
+            observed.decelStart.push(pos);
+            if (activeCycle) activeCycle.decelStartPos = pos;
+          }
+          if (key === "creep") {
+            observed.creepStart.push(pos);
+            if (activeCycle) activeCycle.creepStartPos = pos;
+          }
+        }
+      }
+      previous[key] = on;
+    }
+
+    if (setType === "A") {
+      if (moving && activeCycle) activeCycle.peakCmd = Math.max(activeCycle.peakCmd, Math.abs(cmd || 0));
+      if (moving && Number.isFinite(pos)) {
+        positionWindow.push({ t, pos, decel: values.decel });
+        while (positionWindow.length > 2 && t - positionWindow[0].t > 120) positionWindow.shift();
+        const base = positionWindow[0];
+        const dtPos = (t - base.t) / 1000;
+        if (dtPos >= 0.08) {
+          const velocity = (pos - base.pos) / dtPos;
+          kinematics.maxSpeedCounts = Math.max(kinematics.maxSpeedCounts, Math.abs(velocity));
+          velocityWindow.push({ t, velocity, decel: values.decel });
+          while (velocityWindow.length > 2 && t - velocityWindow[0].t > 120) velocityWindow.shift();
+          const baseV = velocityWindow[0];
+          const dtVel = (t - baseV.t) / 1000;
+          const inDecel = values.decel > 0.5 || baseV.decel > 0.5;
+          if (dtVel >= 0.08 && inDecel) {
+            const accel = (velocity - baseV.velocity) / dtVel;
+            if (accel < 0) kinematics.maxDecelCounts = Math.max(kinematics.maxDecelCounts, -accel);
+          }
+        }
+      } else {
+        positionWindow.length = 0;
+        velocityWindow.length = 0;
+      }
+      if (!moving && wasMoving && Number.isFinite(moveStart)) {
+        const durationSec = (t - moveStart) / 1000;
+        cycleDurations.push(durationSec);
+        if (Number.isFinite(pos)) {
+          activeCycle.durationSec = durationSec;
+          activeCycle.stopT = t;
+          activeCycle.stopPos = pos;
+          cycles.push(activeCycle);
+          pendingStop = { until: t + 1000, base: pos, max: pos, cycle: activeCycle };
+          observed.stopPos.push(pos);
+        }
+        activeCycle = null;
+      }
+      if (pendingStop && Number.isFinite(pos)) {
+        pendingStop.max = Math.max(pendingStop.max, pos);
+        if (t >= pendingStop.until || moving) {
+          const overrun = Math.max(0, pendingStop.max - pendingStop.base);
+          overruns.push(overrun);
+          pendingStop.cycle.overrunCounts = overrun;
+          pendingStop = null;
+        }
+      }
+      wasMoving = moving;
+    }
+    if (sampleCount % stride === 0 || sampleCount === 1 || changed) rows.push({ t, ...values });
+  }
+  if (pendingStop) {
+    const overrun = Math.max(0, pendingStop.max - pendingStop.base);
+    overruns.push(overrun);
+    pendingStop.cycle.overrunCounts = overrun;
+  }
+  if (!sampleCount) throw new Error("Data 행에서 유효한 날짜·시간 샘플을 찾지 못했습니다.");
+
+  const metrics = setType === "A" ? deriveCsvMetrics(cycleDurations, overruns, observed, cycles, kinematics) : deriveBMetrics(events);
+  const durationSec = Number.isFinite(firstT) && Number.isFinite(lastT) ? (lastT - firstT) / 1000 : 0;
+  const overlay = setType === "A" && indices.pos >= 0 && indices.cmd >= 0
+    ? rows.filter((row) => Number.isFinite(row.pos) && Number.isFinite(row.cmd)).map((row) => ({ pos: row.pos, cmd: row.cmd }))
+    : [];
+  return { setType, fileName, header, rows, overlay, metrics, cycles, sampleMs, durationSec, sampleCount, maxCmd, firstT, lastT, foundKeys, missingKeys, tempCondition: oilConditionSummary() };
+}
+
+function renderDatasetResult(dataset) {
+  const { setType, fileName, metrics, sampleMs, durationSec, sampleCount, maxCmd, foundKeys, missingKeys, tempCondition } = dataset;
+  const result = $(setType === "A" ? "csvResultA" : "csvResultB");
+  const metricHtml = setType === "A" ? `
+      <div class="csv-stat"><span>사이클</span><strong>${metrics.cycleCount || "-"}</strong></div>
+      <div class="csv-stat"><span>중앙 시간</span><strong>${metrics.medianCycleSec ? metrics.medianCycleSec.toFixed(2) + " s" : "-"}</strong></div>
+      <div class="csv-stat"><span>95% 시간</span><strong>${metrics.p95CycleSec ? metrics.p95CycleSec.toFixed(2) + " s" : "-"}</strong></div>
+      <div class="csv-stat"><span>최대 시간</span><strong>${metrics.maxCycleSec ? metrics.maxCycleSec.toFixed(2) + " s" : "-"}</strong></div>
+      <div class="csv-stat"><span>느린 사이클</span><strong>${metrics.slowCycleCount}</strong></div>
+      <div class="csv-stat"><span>최대 지령</span><strong>${maxCmd ? maxCmd.toFixed(2) + " V" : "-"}</strong></div>
+      <div class="csv-stat"><span>추가 이동 중앙</span><strong>${Math.round(metrics.overrunCounts || 0)} counts</strong></div>` : `
+      <div class="csv-stat"><span>출발허가</span><strong>${metrics.permitStarts}</strong></div>
+      <div class="csv-stat"><span>운전 시작</span><strong>${metrics.runningStarts}</strong></div>
+      <div class="csv-stat"><span>호밍 시작</span><strong>${metrics.homingStarts}</strong></div>
+      <div class="csv-stat"><span>허가→운전</span><strong>${Number.isFinite(metrics.startDelaySec) ? metrics.startDelaySec.toFixed(3) + " s" : "-"}</strong></div>
+      <div class="csv-stat"><span>운전끝→정지확인</span><strong>${Number.isFinite(metrics.stopConfirmSec) ? metrics.stopConfirmSec.toFixed(3) + " s" : "-"}</strong></div>`;
+  result.innerHTML = `
+    <h3>${esc(fileName)} · Trend ${setType} 분석 완료</h3>
+    <div class="csv-stats">
+      <div class="csv-stat"><span>샘플</span><strong>${sampleCount.toLocaleString()}</strong></div>
+      <div class="csv-stat"><span>기간</span><strong>${durationSec.toFixed(2)} s</strong></div>
+      <div class="csv-stat"><span>주기</span><strong>${sampleMs || "?"} ms</strong></div>
+      ${metricHtml}
+    </div>
+    <p><b>오일 조건 기록:</b> ${esc(tempCondition || "기록 없음")}</p>
+    <p><b>인식:</b> ${foundKeys.join(" · ")}</p>
+    <p><b>부족:</b> ${missingKeys.length ? missingKeys.join(" · ") : "없음"}</p>`;
+}
+
+function updateCombinedAnalysis() {
+  const a = state.csvA;
+  const b = state.csvB;
+  const screenP = readP();
+  const screenLogic = deriveProfileLogic(screenP);
+  $("localInputState").textContent = `A ${a ? "입력" : "미입력"} · B ${b ? "입력" : "미입력"}`;
+  const overlap = datasetsOverlap(a, b);
+  $("mergeState").textContent = a && b ? (overlap > 0 ? `결합 가능 · ${overlap.toFixed(2)} s 겹침` : "결합 불가 · 수집시간 불일치") : "두 파일 대기";
+  const level = $("recommendationLevel");
+  const meaning = $("recommendationMeaning");
+  if (a && b && overlap > 0) {
+    level.textContent = "Trend A+B 실측 근거 포함 추천 후보";
+    level.className = "decision good";
+    meaning.textContent = "A의 실측 프로파일과 B의 상태 타이밍을 함께 설명에 사용합니다.";
+  } else if (a) {
+    level.textContent = "Trend A 실측 근거 포함 추천 후보";
+    level.className = "decision good";
+    meaning.textContent = "실측 위치·지령은 반영하지만 상태 원인은 Trend B 없이 확정하지 않습니다.";
+  } else {
+    level.textContent = "증상 기반 가설";
+    level.className = "decision warn";
+    meaning.textContent = "Trend A가 없으므로 실제 가동값 기반 추천이 아닙니다.";
+  }
+  const lines = [`<b>현재 화면 논리계산:</b> MAX 도달 약 ${Math.round(screenLogic.accelEnd)} counts → DECEL ${Math.round(screenLogic.decelStart)} counts 초과 → ${screenLogic.hasCreepBeforeIndex ? `CREEP 약 ${Math.round(screenLogic.creepEnter)} counts` : "INDEX가 MIN보다 먼저 전환"} → INDEX OFF 시뮬 약 ${Math.round(screenLogic.stopPos)} counts에서 지령 0. START CREEP ${Math.round(screenP.startCreep)}은 상태 전환점이 아니라 감속식 기준값입니다.`];
+  lines.push(`<b>오일 조건:</b> ${oilConditionSummary()} · ISO VG 46은 점도 등급이며 온도만으로 파라미터를 자동 변경하지 않습니다.`);
+  if (a) {
+    const m = a.metrics;
+    lines.push(`<b>Trend A 측정:</b> ${(a.durationSec / 60).toFixed(1)}분의 ${a.sampleCount.toLocaleString()}개 원본 샘플을 ${m.cycleCount || 0}사이클로 분리했습니다. 중앙 ${m.medianCycleSec ? m.medianCycleSec.toFixed(2) + " s" : "계산 불가"}, 95% ${m.p95CycleSec ? m.p95CycleSec.toFixed(2) + " s" : "계산 불가"}, 최대 ${m.maxCycleSec ? m.maxCycleSec.toFixed(2) + " s" : "계산 불가"}, 정지 지령 후 추가 이동 중앙 ${Math.round(m.overrunCounts || 0)} counts.`);
+    lines.push(`<b>Trend A 근사:</b> 전체 10 ms 위치값을 약 100 ms 이동창으로 계산한 최대 감속 ${m.maxDecelCounts ? Math.round(m.maxDecelCounts).toLocaleString() + " counts/s²" : "계산 불가"}. 유압모터 실속도는 아니며 counts/mm 입력 전에는 m/s²로 해석하지 않습니다.`);
+    if (m.creepStartPos > 0) lines.push(`<b>논리 대조:</b> CSV CREEP 진입 중앙 ${Math.round(m.creepStartPos)} counts · 화면 계산 ${screenLogic.hasCreepBeforeIndex ? Math.round(screenLogic.creepEnter) + " counts" : "계산상 없음"}.`);
+    if (m.slowCycleCount) {
+      const slow = m.slowCycles.map((cycle) => `#${cycle.number} ${cycle.durationSec.toFixed(2)} s`).join(" · ");
+      lines.push(`<b>장시간 기록 자동 선별:</b> 중앙값과의 차이가 큰 느린 사이클 ${m.slowCycleCount}개. 상위 ${slow}.`);
+    } else if (m.cycleCount) {
+      lines.push(`<b>장시간 기록 자동 선별:</b> 현재 기준(${m.slowLimitSec.toFixed(2)} s 초과)에서 느린 사이클이 없습니다.`);
+    }
+    lines.push(`<b>처리 방식:</b> 통계는 전체 10 ms 샘플로 계산하고, 화면 그래프만 ${a.rows.length.toLocaleString()}점으로 축약해 표시합니다.`);
+  }
+  if (b) {
+    const m = b.metrics;
+    lines.push(`<b>Trend B 측정:</b> 출발허가 ${m.permitStarts}회, 운전시작 ${m.runningStarts}회, 호밍시작 ${m.homingStarts}회. 전환쌍이 있을 때 허가→운전 ${Number.isFinite(m.startDelaySec) ? m.startDelaySec.toFixed(3) + " s" : "계산 불가"}, 운전종료→정지확인 ${Number.isFinite(m.stopConfirmSec) ? m.stopConfirmSec.toFixed(3) + " s" : "계산 불가"}.`);
+  }
+  if (a && b && !overlap) lines.push(`<b>판단 불가:</b> A와 B의 날짜·시간이 겹치지 않아 같은 사이클의 원인으로 결합하지 않습니다.`);
+  $("combinedResult").innerHTML = lines.join("<br>");
+  updatePhysics();
+  updateCycleTimeDisplay();
+  drawGraph();
+}
+
+function drawCsvGraph() {
+  if (!state.csvA?.rows?.length) return;
+  const canvas = $("csvCv");
+  const { cssW: w, cssH: h, ctx } = prepareCanvas(canvas, 900, 260);
+  ctx.fillStyle = "#080c12";
+  ctx.fillRect(0, 0, w, h);
+  const pad = { l: 52, r: 52, t: 28, b: 30 };
+  const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
+  const rows = state.csvA.rows;
+  const t0 = rows[0].t, t1 = rows[rows.length - 1].t || t0 + 1;
+  const positions = rows.map((r) => r.pos).filter(Number.isFinite);
+  const commands = rows.map((r) => Math.abs(r.cmd)).filter(Number.isFinite);
+  const pMin = positions.length ? Math.min(...positions) : 0;
+  const pMax = positions.length ? Math.max(...positions) : 1;
+  const cMax = commands.length ? Math.max(...commands, 0.1) : 1;
+  const x = (t) => pad.l + ((t - t0) / Math.max(1, t1 - t0)) * W;
+  const yPos = (v) => pad.t + H - ((v - pMin) / Math.max(1, pMax - pMin)) * H;
+  const yCmd = (v) => pad.t + H - (Math.abs(v) / cMax) * H;
+  ctx.strokeStyle = "#1d2a35";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 5; i++) {
+    const yy = pad.t + (H * i) / 5;
+    ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(pad.l + W, yy); ctx.stroke();
+  }
+  const drawSeries = (key, mapY, color) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.beginPath();
+    let started = false;
+    for (const row of rows) {
+      const value = row[key];
+      if (!Number.isFinite(value)) continue;
+      if (!started) { ctx.moveTo(x(row.t), mapY(value)); started = true; }
+      else ctx.lineTo(x(row.t), mapY(value));
+    }
+    if (started) ctx.stroke();
+  };
+  drawSeries("pos", yPos, "#4aa3ff");
+  drawSeries("cmd", yCmd, "#f5c042");
+  ctx.fillStyle = "#c9d6df"; ctx.font = "12px sans-serif";
+  ctx.fillText("SC2 CSV 시간 트렌드", pad.l, 16);
+  ctx.fillStyle = "#4aa3ff"; ctx.fillText("위치 counts", pad.l + 145, 16);
+  ctx.fillStyle = "#f5c042"; ctx.fillText("지령 V", pad.l + 230, 16);
+  ctx.fillStyle = "#91a2af";
+  ctx.fillText("0 s", pad.l, h - 8);
+  ctx.fillText(`${((t1 - t0) / 1000).toFixed(1)} s`, pad.l + W - 35, h - 8);
+  if (positions.length) { ctx.fillText(Math.round(pMax).toString(), 4, pad.t + 4); ctx.fillText(Math.round(pMin).toString(), 4, pad.t + H); }
+  if (commands.length) ctx.fillText(`${cMax.toFixed(2)} V`, w - 47, pad.t + 4);
+}
+
+/* ----- Tabs ----- */
+function setTab(tab) {
+  state.tab = tab;
+  document.body.classList.toggle("mode-basic", tab === "basic");
+  document.body.classList.toggle("mode-expert", tab === "expert");
+  $("tabBasic").classList.toggle("on", tab === "basic");
+  $("tabExpert").classList.toggle("on", tab === "expert");
+  $("tabCollect").classList.toggle("on", tab === "collect");
+
+  const main = tab !== "collect";
+  $("viewMain").classList.toggle("on", main);
+  $("viewCollect").classList.toggle("on", !main);
+
+  if (main) {
+    requestAnimationFrame(() => {
+      drawGraph();
+    });
+  } else if (state.csvA) {
+    requestAnimationFrame(() => drawCsvGraph());
+  }
+}
+
+/* ----- Hover tips ----- */
+const floatTip = $("floatTip");
+document.querySelectorAll(".hmi-cell").forEach((cell) => {
+  const key = cell.dataset.key;
+  cell.addEventListener("mouseenter", (e) => {
+    const t = TIPS[key]?.basic;
+    if (!t) return;
+    floatTip.innerHTML = `<b>${key.replace(/_/g, " ")}</b>${t.replace(/\n/g, "<br>")}`;
+    floatTip.style.display = "block";
+  });
+  cell.addEventListener("mousemove", (e) => {
+    let left = Math.min(e.clientX + 14, window.innerWidth - floatTip.offsetWidth - 8);
+    let top = e.clientY + 14;
+    if (top + floatTip.offsetHeight > window.innerHeight - 8) top = e.clientY - floatTip.offsetHeight - 14;
+    floatTip.style.left = Math.max(8, left) + "px";
+    floatTip.style.top = Math.max(8, top) + "px";
+  });
+  cell.addEventListener("mouseleave", () => {
+    floatTip.style.display = "none";
+  });
+  cell.querySelector(".lbl")?.addEventListener("click", (e) => {
+    if (!window.matchMedia("(max-width: 600px)").matches) return;
+    e.stopPropagation();
+    const t = TIPS[key]?.basic;
+    if (!t) return;
+    floatTip.innerHTML = `<b>${key.replace(/_/g, " ")}</b>${t.replace(/\n/g, "<br>")}`;
+    floatTip.classList.add("mobile-open");
+    floatTip.style.display = "block";
+  });
+});
+document.addEventListener("click", () => {
+  floatTip.classList.remove("mobile-open");
+  floatTip.style.display = "none";
+});
+
+/* Graph hover + optional crosshair */
+function hideGraphCrosshair() {
+  $("tip").style.display = "none";
+  $("graphCrossV").style.display = "none";
+  $("graphCrossH").style.display = "none";
+  $("graphCrossDot").style.display = "none";
+}
+
+function updateGraphCrosshair(e) {
+  if (!$("showCrosshair").checked) {
+    hideGraphCrosshair();
+    return;
+  }
+  const plot = $("graphCv")._plot;
+  if (!plot) return;
+  const rect = $("graphCv").getBoundingClientRect();
+  const hostRect = $("graphCv").parentElement.getBoundingClientRect();
+  const canvasTop = rect.top - hostRect.top;
+  const mx = e.clientX - rect.left;
+  const { p, prof, pad, W, H, xOf, yOf } = plot;
+  if (mx < pad.l || mx > pad.l + W) {
+    hideGraphCrosshair();
+    return;
+  }
+  const pos = ((mx - pad.l) / W) * p.xMax;
+  let best = 0, bd = 1e99;
+  for (let i = 0; i < prof.xs.length; i++) {
+    const d = Math.abs(prof.xs[i] - pos);
+    if (d < bd) { bd = d; best = i; }
+  }
+  const crossX = xOf(prof.xs[best]);
+  const crossY = yOf(prof.vs[best]);
+  const crossV = $("graphCrossV");
+  const crossH = $("graphCrossH");
+  const crossDot = $("graphCrossDot");
+  crossV.style.display = "block";
+  crossV.style.left = crossX + "px";
+  crossV.style.top = (canvasTop + pad.t) + "px";
+  crossV.style.height = H + "px";
+  crossH.style.display = "block";
+  crossH.style.left = pad.l + "px";
+  crossH.style.top = (canvasTop + crossY) + "px";
+  crossH.style.width = W + "px";
+  crossDot.style.display = "block";
+  crossDot.style.left = crossX + "px";
+  crossDot.style.top = (canvasTop + crossY) + "px";
+
+  const tip = $("tip");
+  tip.style.display = "block";
+  const placeLeft = crossX > rect.width - 230;
+  const placeAbove = crossY > rect.height - 105;
+  tip.style.left = Math.max(8, placeLeft ? crossX - 204 : crossX + 14) + "px";
+  tip.style.top = Math.max(canvasTop + 8, canvasTop + (placeAbove ? crossY - 88 : crossY + 14)) + "px";
+  tip.innerHTML =
+    `위치 <b>${prof.xs[best].toFixed(0)} counts</b><br>` +
+    `지령전압 <b>${prof.vs[best].toFixed(3)} V</b><br>` +
+    `구간 <b>${prof.ph[best]}</b>`;
+}
+$("graphCv").addEventListener("pointermove", updateGraphCrosshair);
+$("graphCv").addEventListener("pointerdown", updateGraphCrosshair);
+$("graphCv").addEventListener("pointerleave", hideGraphCrosshair);
+$("showCrosshair").addEventListener("change", () => {
+  if (!$("showCrosshair").checked) hideGraphCrosshair();
+});
+
+/* Wire controls */
+$("tabBasic").onclick = () => setTab("basic");
+$("tabExpert").onclick = () => setTab("expert");
+$("tabCollect").onclick = () => setTab("collect");
+
+$("btnCycle").onclick = () => startCycle();
+$("btnStop").onclick = () => stopCycle(false);
+$("btnReset").onclick = () => stopCycle(true);
+$("btnPause").onclick = () => {
+  if (!state.running) return;
+  state.paused = !state.paused;
+  $("btnPause").textContent = state.paused ? "계속" : "일시정지";
+  state.lastT = performance.now();
+  updateStatus();
+  drawGraph();
+};
+
+$("btnCapture").onclick = () => {
+  writeP({
+    startCreep: CAPTURE.START_CREEP_COUNT,
+    startDecel: CAPTURE.START_DECEL_COUNTS,
+    accelSlope: CAPTURE.ACCEL_SLOPE,
+    decelSlope: CAPTURE.DECEL_SLOPE,
+    vstart: CAPTURE.INDEX_SPEED_START,
+    vmax: CAPTURE.INDEX_SPEED_MAX,
+    vmin: CAPTURE.INDEX_SPEED_MIN,
+    vhome: CAPTURE.HOMING_SPEED,
+    vmanual: CAPTURE.FMM_REV_SPEED,
+    target: CAPTURE.TARGET_COUNTS,
+    polarity: CAPTURE.POLARITY,
+    indexPos: CAPTURE.INDEX_POS,
+    indexWidth: CAPTURE.INDEX_WIDTH,
+    xMax: CAPTURE.X_MAX,
+  });
+  stopCycle(true);
+  state.rec = null;
+  $("recBox").classList.remove("show");
+  $("btnApplyRec").disabled = true;
+  drawGraph();
+};
+
+$("btnTune").onclick = () => recommend();
+$("btnApplyRec").onclick = () => {
+  if (!state.rec) return;
+  writeP(state.rec);
+  state.rec = null;
+  $("recBox").classList.remove("show");
+  $("btnApplyRec").disabled = true;
+  stopCycle(true);
+  drawGraph();
+};
+
+document.querySelectorAll("#probChips .chip").forEach((b) => {
+  b.setAttribute("aria-pressed", "false");
+  b.onclick = () => {
+    const k = b.dataset.p;
+    if (state.problems.has(k)) {
+      state.problems.delete(k);
+      b.classList.remove("on");
+      b.setAttribute("aria-pressed", "false");
+    } else {
+      const opposite = EXCLUSIVE_PROBLEMS[k];
+      if (opposite && state.problems.has(opposite)) {
+        state.problems.delete(opposite);
+        const oppositeButton = document.querySelector(`#probChips .chip[data-p="${opposite}"]`);
+        if (oppositeButton) {
+          oppositeButton.classList.remove("on");
+          oppositeButton.setAttribute("aria-pressed", "false");
+        }
+      }
+      state.problems.add(k);
+      b.classList.add("on");
+      b.setAttribute("aria-pressed", "true");
+    }
+    state.rec = null;
+    $("recBox").classList.remove("show");
+    $("btnApplyRec").disabled = true;
+  };
+});
+document.querySelectorAll("#tempChips .chip").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll("#tempChips .chip").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    state.temp = b.dataset.t;
+    state.rec = null;
+    $("recBox").classList.remove("show");
+    $("btnApplyRec").disabled = true;
+    updateTemperatureEvidence();
+    updateCombinedAnalysis();
+  };
+});
+
+$("btnHelp").onclick = () => $("helpModal").classList.add("show");
+$("btnHelpClose").onclick = () => $("helpModal").classList.remove("show");
+$("helpModal").onclick = (event) => {
+  if (event.target === $("helpModal")) $("helpModal").classList.remove("show");
+};
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") $("helpModal").classList.remove("show");
+});
+
+async function handleCsvFile(file, setType) {
+  if (!file) return;
+  const nameEl = $(setType === "A" ? "csvFileNameA" : "csvFileNameB");
+  const resultEl = $(setType === "A" ? "csvResultA" : "csvResultB");
+  const maxRecommendedBytes = 100 * 1024 * 1024;
+  if (file.size > maxRecommendedBytes && !window.confirm(`${file.name}은 ${(file.size / 1024 / 1024).toFixed(1)} MB입니다. 모바일에서는 분석이 오래 걸릴 수 있습니다. 계속할까요?`)) return;
+  nameEl.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} MB 읽는 중…`;
+  resultEl.innerHTML = `<h3>Trend ${setType} 분석 중</h3><p>10 ms 원본을 읽고 사이클·상태 전환을 내부에서 정리하고 있습니다.</p>`;
+  try {
+    const text = await file.text();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const dataset = await parseStudioTrendCsv(text, file.name, setType, (progress) => {
+      nameEl.textContent = `${file.name} · 로컬 분석 ${progress}%`;
+      resultEl.innerHTML = `<h3>Trend ${setType} 분석 중 · ${progress}%</h3><p>데이터를 나누어 처리하고 있습니다. 이 페이지를 닫지 마십시오.</p>`;
+    });
+    state[setType === "A" ? "csvA" : "csvB"] = dataset;
+    state.rec = null;
+    $("recBox").classList.remove("show");
+    $("btnApplyRec").disabled = true;
+    nameEl.textContent = `${file.name} · ${dataset.sampleCount.toLocaleString()} samples · 로컬 분석 완료`;
+    renderDatasetResult(dataset);
+    if (setType === "A") {
+      $("csvChartWrap").classList.add("show");
+      drawCsvGraph();
+    }
+    updateCombinedAnalysis();
+  } catch (error) {
+    state[setType === "A" ? "csvA" : "csvB"] = null;
+    nameEl.textContent = `${file.name} · 분석 실패`;
+    resultEl.innerHTML = `<h3>Trend ${setType}를 읽지 못했습니다</h3><p>${esc(error.message || error)}</p><p>선택칸과 CSV 태그 구성이 일치하는지 확인하십시오.</p>`;
+    if (setType === "A") $("csvChartWrap").classList.remove("show");
+    updateCombinedAnalysis();
+  }
+}
+
+$("csvFileA").addEventListener("change", (event) => handleCsvFile(event.target.files?.[0], "A"));
+$("csvFileB").addEventListener("change", (event) => handleCsvFile(event.target.files?.[0], "B"));
+for (const setType of ["A", "B"]) {
+  const box = $(`uploadBox${setType}`);
+  for (const eventName of ["dragenter", "dragover"]) {
+    box.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      box.style.borderColor = "#3dd68c";
+    });
+  }
+  for (const eventName of ["dragleave", "drop"]) {
+    box.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      box.style.borderColor = "";
+    });
+  }
+  box.addEventListener("drop", (event) => handleCsvFile(event.dataTransfer?.files?.[0], setType));
+}
+
+// live update on any input
+document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el) => {
+  el.addEventListener("input", () => {
+    state.rec = null;
+    $("recBox").classList.remove("show");
+    $("btnApplyRec").disabled = true;
+    if (!state.running) {
+      drawGraph();
+      updateCycleTimeDisplay();
+    }
+  });
+});
+$("OIL_TEMP_C").addEventListener("input", () => {
+  state.rec = null;
+  $("recBox").classList.remove("show");
+  $("btnApplyRec").disabled = true;
+  updateTemperatureEvidence();
+  updateCombinedAnalysis();
+});
+document.querySelectorAll(".physics-panel input, .physics-panel select").forEach((el) => {
+  el.addEventListener("input", updatePhysics);
+});
+
+let resizeTimer = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (state.tab !== "collect") drawGraph();
+    else if (state.csvA) drawCsvGraph();
+  }, 120);
+});
+document.addEventListener("visibilitychange", () => {
+  state.lastT = performance.now();
+  if (!document.hidden && state.running) scheduleSimRender(true);
+});
+
+// init
+renderHelp();
+setTab("basic");
+drawGraph();
+updateStatus();
+updatePhysics();
+updateCombinedAnalysis();
+</script>
+</body>
+</html>
