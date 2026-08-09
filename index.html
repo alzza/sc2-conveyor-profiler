@@ -66,6 +66,29 @@
     font-weight: 700;
     white-space: nowrap;
   }
+  .brand-block {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 8px;
+  }
+  .app-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+  .app-meta a, .app-meta button {
+    border: 0;
+    background: transparent;
+    color: var(--cyan);
+    padding: 2px;
+    font: inherit;
+    text-decoration: none;
+  }
+  .app-meta button:hover, .app-meta a:hover { text-decoration: underline; }
   .app-bar .sub {
     color: var(--muted);
     font-size: 0.8rem;
@@ -871,6 +894,20 @@
     font-size: 0.86rem;
     color: var(--muted);
   }
+  .changelog {
+    width: 100%;
+    max-width: 980px;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #36516a;
+    border-radius: 10px;
+    background: #101820;
+  }
+  .changelog h3 { margin: 0 0 8px; color: var(--cyan); font-size: 0.94rem; }
+  .changelog article { padding: 8px 0; border-top: 1px solid var(--line); }
+  .changelog article:first-of-type { border-top: 0; }
+  .changelog b { color: var(--text); font-size: 0.84rem; }
+  .changelog p { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
 
   /* Mobile operator layout: keep the desktop HMI unchanged, reflow only below 600 px. */
   @media (max-width: 600px) {
@@ -895,6 +932,8 @@
       width: 100%;
       justify-content: center;
     }
+    .brand-block { flex-direction: column; gap: 3px; }
+    .app-meta { justify-content: center; flex-wrap: wrap; font-size: 0.7rem; }
     .app-bar h1 {
       max-width: 100%;
       font-size: 1rem;
@@ -1101,14 +1140,19 @@
 </div>
 
 <div class="app-bar">
-  <div style="display:flex;align-items:center;min-width:0">
+  <div class="brand-block">
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
+    <span class="app-meta">
+      <span>v1.1.0</span>
+      <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
+      <button type="button" id="btnChangelog">변경이력</button>
+    </span>
   </div>
   <div class="tabs" role="tablist">
     <button type="button" class="on" data-tab="basic" id="tabBasic">기본 모드</button>
     <button type="button" class="expert" data-tab="expert" id="tabExpert">고급 모드</button>
-    <button type="button" class="collect" data-tab="collect" id="tabCollect">정보수집 태그</button>
+    <button type="button" class="collect" data-tab="collect" id="tabCollect">CSV 첨부</button>
   </div>
 </div>
 
@@ -1334,7 +1378,7 @@
 
 <!-- ========== COLLECT ========== -->
 <div class="view collect-view" id="viewCollect">
-  <h2>정보수집 태그 · Studio 5000 Trend</h2>
+  <h2>CSV 첨부 · Studio 5000 Trend</h2>
   <p class="lead">
     HMI CONVEYOR PROFILING 계산에 따라 <b>움직이는</b> 데이터입니다.
     <b>CSM 프로그램 분석</b> · Program: <code>Sheet_Conveyor_2</code>.
@@ -1512,6 +1556,18 @@
     <b style="color:var(--text)">Trend B · 7 pen:</b> 운전·호밍·허가·정지상태 전환시간을 분석하며, A와 날짜·시간이 겹칠 때만 종합 판단에 결합합니다.<br>
     별도 실속도·압력·유량 피드백이 없으므로 유압 원인은 확정하지 않습니다. 모든 계산은 이 HTML 파일 안에서 오프라인으로 실행됩니다.
   </div>
+
+  <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
+    <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v1.1.0 · 2026-08-10</b>
+      <p>iOS·Android 모바일 실행 최적화, 터치 십자선과 HMI 탭 도움말, 대용량 CSV 분할 분석, START CREEP 기준선과 실제 CREEP 진입 설명을 추가했습니다.</p>
+    </article>
+    <article>
+      <b>v1.0.0 · 2026-08-10</b>
+      <p>SC2 HMI 파라미터, CSM 프로파일 시뮬레이션, 증상 선택, Trend A·B 로컬 CSV 분석 기능을 공개했습니다.</p>
+    </article>
+  </section>
 </div>
 
 <div class="help-modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
@@ -3064,6 +3120,10 @@ $("showCrosshair").addEventListener("change", () => {
 $("tabBasic").onclick = () => setTab("basic");
 $("tabExpert").onclick = () => setTab("expert");
 $("tabCollect").onclick = () => setTab("collect");
+$("btnChangelog").onclick = () => {
+  setTab("collect");
+  requestAnimationFrame(() => $("changelog").scrollIntoView({ behavior: "auto", block: "start" }));
+};
 
 $("btnCycle").onclick = () => startCycle();
 $("btnStop").onclick = () => stopCycle(false);
