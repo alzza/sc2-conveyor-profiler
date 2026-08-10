@@ -518,6 +518,21 @@
   }
   .side-actions .btn.tune { background: #5a4a18; border-color: #a08030; }
   .side-actions .btn.apply { background: #1a4a38; border-color: #3a8a68; }
+  .linked-tune {
+    border: 1px solid #3d5260;
+    background: #131d25;
+    border-radius: 8px;
+    padding: 9px 10px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+  .linked-tune label { display: flex; align-items: center; gap: 7px; color: var(--text); font-size: 0.84rem; font-weight: 800; }
+  .linked-tune input { width: 17px; height: 17px; accent-color: #36b9c9; }
+  .linked-tune .linked-note { margin-top: 3px; color: var(--amber); }
+  .linked-tune .linked-status { margin-top: 6px; color: var(--cyan); }
+  .linked-tune.warn { border-color: #8d5530; }
+  .linked-tune.warn .linked-status { color: var(--red); }
 
   .mini-problems {
     background: #222a30;
@@ -1178,7 +1193,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.1.2</span>
+      <span>v1.2.0</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1252,7 +1267,7 @@
         </div>
         <div class="creep-guide-item">
           <strong class="actual" id="creepActualTitle">실제 CREEP 진입 · MIN 도달 위치</strong>
-          계산된 감속 지령이 INDEX SPEED MIN에 도달하는 위치입니다. 여기부터 MIN 지령으로 INDEX 센서 OFF 지점까지 이동합니다.
+          감속 지령이 INDEX SPEED MIN 아래 조건이 되어 CREEP 단계로 전환되는 위치입니다. PLC는 전환 직전 감속 지령을 유지하다 INDEX 센서 OFF에서 0 V가 됩니다.
         </div>
         <div class="creep-calculation" id="creepCalculation">현재 프로파일링 값을 계산 중입니다.</div>
         <div class="creep-guide-flow" id="creepGuideFlow">현재 값의 진행 순서를 계산 중입니다.</div>
@@ -1334,6 +1349,12 @@
         <button type="button" class="btn" id="btnCapture">캡처값</button>
         <button type="button" class="btn tune" id="btnTune">추천 후보 계산</button>
         <button type="button" class="btn apply" id="btnApplyRec" disabled>화면 시험값 적용</button>
+      </div>
+
+      <div class="linked-tune" id="linkedTuneBox">
+        <label><input type="checkbox" id="linkedTune" /> 연동 시험 후보</label>
+        <div class="linked-note">기본 OFF · 화면값만 연동 · PLC 자동 적용 안 함</div>
+        <div class="linked-status" id="linkedTuneStatus">OFF: 각 파라미터를 독립적으로 입력합니다.</div>
       </div>
 
       <div class="mini-problems">
@@ -1591,6 +1612,10 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
+      <b>v1.2.0 · 2026-08-10</b>
+      <p>실제 SC2 감속식 기준의 연동 시험 후보(기본 OFF)를 추가했습니다. 연결된 값만 화면에서 조정하며 PLC에는 자동 적용하지 않습니다.</p>
+    </article>
+    <article>
       <b>v1.1.2 · 2026-08-10</b>
       <p>압력·유량·모터 RPM·sheet 미끄러짐·마찰·관성력 추정을 분석과 추천에서 제외하고, encoder 위치·지령·상태 전환·사이클 시간만으로 결과를 표시하도록 변경했습니다.</p>
     </article>
@@ -1782,6 +1807,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   tab: "basic",
   profileSource: "캡처값 기준",
+  linkedTuneReference: null,
   problems: new Set(),
   temp: "normal",
   oilTempC: NaN,
@@ -1887,6 +1913,85 @@ function round(v) {
   return Math.round(v * 1000) / 1000;
 }
 
+const LINKED_TUNE_LIMITS = { counts: 250, slopeRatio: 0.25 };
+const LINKED_TUNE_NAMES = {
+  INDEX_SPEED_START: "INDEX SPEED START → ACCEL SLOPE",
+  INDEX_SPEED_MAX: "INDEX SPEED MAX → ACCEL/DECEL SLOPE",
+  INDEX_SPEED_MIN: "INDEX SPEED MIN → DECEL SLOPE",
+  START_DECEL_COUNTS: "START DECEL COUNTS → START CREEP COUNT",
+  START_CREEP_COUNT: "START CREEP COUNT → DECEL SLOPE",
+  DECEL_SLOPE: "DECEL SLOPE → START CREEP COUNT",
+};
+
+function setLinkedTuneStatus(message, warn = false) {
+  const box = $("linkedTuneBox");
+  const status = $("linkedTuneStatus");
+  if (status) status.textContent = message;
+  if (box) box.classList.toggle("warn", warn);
+}
+
+function disableLinkedTune(message = "OFF: 각 파라미터를 독립적으로 입력합니다.") {
+  const toggle = $("linkedTune");
+  if (toggle) toggle.checked = false;
+  state.linkedTuneReference = null;
+  setLinkedTuneStatus(message);
+}
+
+function linkedTuneValueOk(key, before, after) {
+  if (!Number.isFinite(after)) return false;
+  if (key === "START_CREEP_COUNT") return Math.abs(after - before) <= LINKED_TUNE_LIMITS.counts;
+  if (key === "ACCEL_SLOPE" || key === "DECEL_SLOPE") {
+    return Math.abs(after - before) <= Math.max(Math.abs(before) * LINKED_TUNE_LIMITS.slopeRatio, 0.05);
+  }
+  return true;
+}
+
+function applyLinkedTune(changedKey) {
+  const reference = state.linkedTuneReference;
+  if (!reference || !LINKED_TUNE_NAMES[changedKey]) return false;
+  const refLogic = deriveProfileLogic(reference);
+  const current = readP();
+  const updates = {};
+  const creepTarget = refLogic.creepEnter;
+  const accelTarget = refLogic.accelEnd;
+  const decelSpan = current.startCreep - current.startDecel;
+
+  if (!(creepTarget > current.startDecel) || !(current.vmax > current.vmin) || !(decelSpan > 0)) {
+    setLinkedTuneStatus("연동 보류: CREEP 기준 위치 또는 감속식 관계가 유효하지 않습니다.", true);
+    return false;
+  }
+
+  if (changedKey === "INDEX_SPEED_START" || changedKey === "INDEX_SPEED_MAX") {
+    const accel = current.target * (current.vmax - current.vstart) / accelTarget;
+    if (!(accel > 0) || !linkedTuneValueOk("ACCEL_SLOPE", current.accelSlope, accel)) {
+      setLinkedTuneStatus("연동 보류: ACCEL SLOPE 변화폭이 시험 한계를 넘습니다.", true);
+      return false;
+    }
+    updates.ACCEL_SLOPE = accel;
+  }
+  if (changedKey === "INDEX_SPEED_MAX" || changedKey === "INDEX_SPEED_MIN" || changedKey === "START_CREEP_COUNT") {
+    const slope = (current.vmin - current.vmax) * decelSpan / (creepTarget - current.startDecel);
+    if (!(slope < 0) || !linkedTuneValueOk("DECEL_SLOPE", current.decelSlope, slope)) {
+      setLinkedTuneStatus("연동 보류: DECEL SLOPE 변화폭이 시험 한계를 넘습니다.", true);
+      return false;
+    }
+    updates.DECEL_SLOPE = slope;
+  }
+  if (changedKey === "START_DECEL_COUNTS" || changedKey === "DECEL_SLOPE") {
+    const creep = current.startDecel + (creepTarget - current.startDecel) * (-current.decelSlope) / (current.vmax - current.vmin);
+    if (!(creep > current.startDecel) || !linkedTuneValueOk("START_CREEP_COUNT", current.startCreep, creep)) {
+      setLinkedTuneStatus("연동 보류: START CREEP COUNT 변화폭이 시험 한계를 넘습니다.", true);
+      return false;
+    }
+    updates.START_CREEP_COUNT = creep;
+  }
+  for (const [id, value] of Object.entries(updates)) $(id).value = round(value);
+  state.profileSource = "연동 시험 후보 기준";
+  const changed = Object.keys(updates).map((id) => `${id} [${round(updates[id])}]`).join(" · ");
+  setLinkedTuneStatus(`ON: ${LINKED_TUNE_NAMES[changedKey]} · CREEP/ACCEL 기준 위치 유지 · ${changed}`);
+  return Object.keys(updates).length > 0;
+}
+
 /* CSM profile evaluation at position */
 function inIndex(pos, p) {
   const h = Math.max(1, p.indexWidth) / 2;
@@ -1907,6 +2012,9 @@ function deriveProfileLogic(p) {
     creepEnter = p.startDecel + den * ((p.vmin - p.vmax) / p.decelSlope);
   }
   const hasCreepBeforeIndex = Number.isFinite(creepEnter) && creepEnter < indexOffStart;
+  const creepLatchV = hasCreepBeforeIndex
+    ? p.vmax + ((creepEnter - p.startDecel) / den) * p.decelSlope
+    : NaN;
   const stopPos = indexOffStart;
   const creepTravel = hasCreepBeforeIndex ? Math.max(0, stopPos - creepEnter) : 0;
 
@@ -1924,7 +2032,8 @@ function deriveProfileLogic(p) {
     accelEnd,
     decelStart: p.startDecel,
     creepEnter,
-    creepHoldV: Math.max(0, p.vmin),
+    creepHoldV: Number.isFinite(creepLatchV) ? Math.max(0, creepLatchV) : Math.max(0, p.vmin),
+    creepLatchV,
     indexOffStart,
     stopPos,
     creepTravel,
@@ -1968,10 +2077,10 @@ function updateLogicSummary(p, logic) {
   $("creepValueSource").textContent = state.profileSource;
   $("creepFormulaTitle").innerHTML = `<span class="calc-name">START CREEP COUNT</span> <span class="calc-input">${bracket(p.startCreep)}</span> · 감속식 기준값 (전환 아님)`;
   $("creepActualTitle").innerHTML = logic.hasCreepBeforeIndex
-    ? `<span class="calc-name">실제 CREEP 진입</span> <span class="calc-result">${bracket(Math.round(logic.creepEnter))}</span> counts · MIN <span class="calc-input">${bracket(p.vmin, 2)}</span> V 도달`
-    : `<span class="calc-error">실제 CREEP 진입 없음 · MIN 도달 전에 INDEX 전환</span>`;
+    ? `<span class="calc-name">실제 CREEP 진입</span> <span class="calc-result">${bracket(Math.round(logic.creepEnter))}</span> counts · 지령이 MIN <span class="calc-input">${bracket(p.vmin, 2)}</span> V 아래 조건`
+    : `<span class="calc-error">실제 CREEP 진입 없음 · MIN 아래 조건 전에 INDEX 전환</span>`;
   const creepEquation = logic.hasCreepBeforeIndex
-    ? `<span class="calc-name">실제 CREEP 진입</span> = ${input(p.startDecel)} + (${input(p.startCreep)} − ${input(p.startDecel)}) × (${input(p.vmin, 2)} − ${input(p.vmax, 2)}) ÷ ${input(p.decelSlope, 2)} = ${result(Math.round(logic.creepEnter))} counts`
+    ? `<span class="calc-name">실제 CREEP 진입</span> = ${input(p.startDecel)} + (${input(p.startCreep)} − ${input(p.startDecel)}) × (${input(p.vmin, 2)} − ${input(p.vmax, 2)}) ÷ ${input(p.decelSlope, 2)} = ${result(Math.round(logic.creepEnter))} counts · 전환 직전 계산 지령 ${result(logic.creepLatchV, 2)} V`
     : `<span class="calc-error">CREEP 진입 계산 불가 · 위 파라미터 관계 경고를 확인하십시오.</span>`;
   const stopEquation = `<span class="calc-name">INDEX OFF</span> = ${input(p.indexPos)} − ${input(p.indexWidth)} ÷ 2 = ${result(Math.round(logic.stopPos))} counts`;
   $("creepCalculation").innerHTML = `${creepEquation}<br>${stopEquation}`;
@@ -3150,6 +3259,22 @@ $("btnPause").onclick = () => {
   drawGraph();
 };
 
+$("linkedTune").addEventListener("change", () => {
+  if (!$("linkedTune").checked) {
+    disableLinkedTune();
+    return;
+  }
+  const reference = readP();
+  const logic = deriveProfileLogic(reference);
+  if (logic.warnings.length || !(logic.accelEnd > 0) || !logic.hasCreepBeforeIndex) {
+    disableLinkedTune("ON 실패: 현재 프로파일 관계가 유효하지 않아 연동할 수 없습니다.");
+    $("linkedTuneBox").classList.add("warn");
+    return;
+  }
+  state.linkedTuneReference = reference;
+  setLinkedTuneStatus(`ON: ACCEL [${Math.round(logic.accelEnd)}] · CREEP [${Math.round(logic.creepEnter)}] counts 기준을 유지합니다.`);
+});
+
 $("btnCapture").onclick = () => {
   writeP({
     startCreep: CAPTURE.START_CREEP_COUNT,
@@ -3168,6 +3293,7 @@ $("btnCapture").onclick = () => {
     xMax: CAPTURE.X_MAX,
   });
   stopCycle(true);
+  disableLinkedTune("OFF: 캡처값 복원으로 연동 기준을 초기화했습니다.");
   state.rec = null;
   state.profileSource = "캡처값 기준";
   $("recBox").classList.remove("show");
@@ -3179,6 +3305,7 @@ $("btnTune").onclick = () => recommend();
 $("btnApplyRec").onclick = () => {
   if (!state.rec) return;
   writeP(state.rec);
+  disableLinkedTune("OFF: 추천 시험값 적용으로 연동 기준을 초기화했습니다.");
   state.profileSource = "추천 시험값 적용 기준";
   state.rec = null;
   $("recBox").classList.remove("show");
@@ -3293,7 +3420,8 @@ for (const setType of ["A", "B"]) {
 // live update on any input
 document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el) => {
   el.addEventListener("input", () => {
-    state.profileSource = "직접 입력값 기준";
+    const linked = $("linkedTune").checked && applyLinkedTune(el.id);
+    if (!linked) state.profileSource = "직접 입력값 기준";
     state.rec = null;
     $("recBox").classList.remove("show");
     $("btnApplyRec").disabled = true;
