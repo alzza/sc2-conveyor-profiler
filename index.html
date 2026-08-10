@@ -1904,13 +1904,21 @@ function writeP(o) {
     X_MAX: o.xMax,
   };
   for (const [k, v] of Object.entries(map)) {
-    if (v != null && $(k)) $(k).value = round(v);
+    if (v != null && $(k)) $(k).value = formatInputValue(k, v);
   }
 }
 
 function round(v) {
   if (Math.abs(v - Math.round(v)) < 1e-9) return Math.round(v);
   return Math.round(v * 1000) / 1000;
+}
+
+// PLC count parameters are DINT-like whole counts.  Keep linked candidates
+// directly transferable to the HMI instead of presenting fractional counts.
+function formatInputValue(id, value) {
+  return /^(START_CREEP_COUNT|START_DECEL_COUNTS|TARGET_COUNTS|INDEX_POS|INDEX_WIDTH|X_MAX)$/.test(id)
+    ? Math.round(value)
+    : round(value);
 }
 
 const LINKED_TUNE_LIMITS = { counts: 250, slopeRatio: 0.25 };
@@ -1985,9 +1993,9 @@ function applyLinkedTune(changedKey) {
     }
     updates.START_CREEP_COUNT = creep;
   }
-  for (const [id, value] of Object.entries(updates)) $(id).value = round(value);
+  for (const [id, value] of Object.entries(updates)) $(id).value = formatInputValue(id, value);
   state.profileSource = "연동 시험 후보 기준";
-  const changed = Object.keys(updates).map((id) => `${id} [${round(updates[id])}]`).join(" · ");
+  const changed = Object.keys(updates).map((id) => `${id} [${formatInputValue(id, updates[id])}]`).join(" · ");
   setLinkedTuneStatus(`ON: ${LINKED_TUNE_NAMES[changedKey]} · CREEP/ACCEL 기준 위치 유지 · ${changed}`);
   return Object.keys(updates).length > 0;
 }
