@@ -1193,7 +1193,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.2.1</span>
+      <span>v1.2.2</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1611,6 +1611,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v1.2.2 · 2026-08-10</b>
+      <p>Trend A에서 CREEP→INDEX OFF 거리와 INDEX OFF→완전 정지 추가 이동을 분리 표시했습니다. ‘사이클이 느림’과 ‘INDEX를 지남’을 함께 선택하면 MIN 전압을 유지하고 START CREEP COUNT만 소폭 올리는 화면 시험 후보를 제시하며, INDEX OFF 후 이동 증가는 후보 폐기 기준으로 표시합니다.</p>
+    </article>
     <article>
       <b>v1.2.1 · 2026-08-10</b>
       <p>사용자가 업로드한 수정 적용본 HMI 값(START CREEP 4,577 · START DECEL 3,924 · MIN 2.43 V · DECEL SLOPE −1.14)을 화면·캡처 기본값으로 변경했습니다. PLC 자동 적용은 하지 않습니다.</p>
@@ -2578,7 +2582,10 @@ function recommend() {
   const rec = { ...cur };
   const why = [];
   let decelShift = 0;
+  let startCreepShift = 0;
   let diagnosisFirst = false;
+  const cycleTimeGoal = probs.has("slow");
+  const indexPassGoal = probs.has("late") || probs.has("stopDrift");
 
   why.push(temperatureRecommendationReason());
   if (probs.has("sheetSurge")) {
@@ -2593,7 +2600,7 @@ function recommend() {
     rec.vstart = cur.vstart * 0.97;
     why.push("출발 충격: 첫 시험은 ACCEL SLOPE를 유지하고 START SPEED만 3% 낮춤");
   }
-  if (probs.has("late") || probs.has("stopDrift")) {
+  if (indexPassGoal && !cycleTimeGoal) {
     decelShift -= Math.max(30, Math.round(span * 0.05));
     why.push("INDEX 센서 OFF 정지점을 지난 추가 이동/지령 0 후 추가 이동: START DECEL을 앞당기는 방향");
   }
@@ -2605,8 +2612,14 @@ function recommend() {
     rec.vhome = cur.vhome * 0.95;
     why.push("Homing 중 INDEX 센서를 지나침: 자동 프로파일은 건드리지 않고 HOMING SPEED만 5% 낮춤");
   }
-  if (probs.has("slow")) {
-    why.push("전체 느림: 실측 사이클 시간만으로 MAX를 자동으로 올리지 않음");
+  if (cycleTimeGoal) {
+    if (aMetric?.creepTravelCounts > 200 && currentLogic.hasCreepBeforeIndex) {
+      startCreepShift = Math.max(50, Math.min(100, Math.round(span * 0.12)));
+      why.push(`사이클 단축 우선: CSV CREEP→INDEX OFF 중앙 ${Math.round(aMetric.creepTravelCounts)} counts를 줄이기 위해 START CREEP COUNT만 +${startCreepShift} counts 시험. MIN ${round(cur.vmin)} V는 유지해 INDEX 직전 지령을 올리지 않음`);
+      if (indexPassGoal) why.push("중요: 이 후보는 INDEX OFF 후 추가 이동을 줄이는 값이 아니라, INDEX 직전 CREEP 지령을 유지하며 앞 구간 시간을 줄이는 시험입니다. INDEX OFF 후 이동은 별도 통과 기준으로 판정합니다.");
+    } else {
+      why.push("전체 느림: CSV CREEP→INDEX OFF 거리 확인 전에는 MAX를 자동으로 올리지 않음");
+    }
   }
   if (["pulse", "cavitation", "chainShock", "skew", "sensor", "directionDiff", "loadDiff", "cycleVariation"].some((key) => probs.has(key))) {
     diagnosisFirst = true;
@@ -2646,7 +2659,7 @@ function recommend() {
   const maxShift = Math.max(60, Math.min(150, Math.round(span * 0.20)));
   decelShift = Math.max(-maxShift, Math.min(maxShift, decelShift));
   rec.startDecel = Math.max(200, Math.min(cur.startCreep - 100, Math.round(cur.startDecel + decelShift)));
-  rec.startCreep = cur.startCreep;
+  rec.startCreep = Math.max(rec.startDecel + 100, Math.round(cur.startCreep + startCreepShift));
   rec.decelSlope = cur.decelSlope;
   rec.vmin = cur.vmin;
   rec.accelSlope = round(Math.max(0.05, rec.accelSlope));
@@ -2675,7 +2688,8 @@ function recommend() {
     : "조업 증상만 반영한 추천 가설";
   const hasChanges = rows.some(([, a, b]) => Math.abs(Number(a) - Number(b)) > 1e-9);
   const logicCompare = `CREEP 진입 계산 ${currentLogic.hasCreepBeforeIndex ? Math.round(currentLogic.creepEnter) + " counts" : "INDEX 우선"} → ${recommendedLogic.hasCreepBeforeIndex ? Math.round(recommendedLogic.creepEnter) + " counts" : "INDEX 우선"}, CREEP 이동 ${Math.round(currentLogic.creepTravel)} → ${Math.round(recommendedLogic.creepTravel)} counts`;
-  $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 이 화면은 파라미터 후보를 만들지 않습니다." : ""}`;
+  const indexRule = indexPassGoal ? `<br><b>통과 기준:</b> CSV의 INDEX OFF → 완전 정지 추가 이동 중앙값과 최대값이 현재보다 커지면 이 후보는 폐기합니다. 현재 SC2는 INDEX OFF 후 0 V가 되므로, 파라미터만으로 INDEX OFF 이후 0 counts를 보장할 수 없습니다.` : "";
+  $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${indexRule}${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 이 화면은 파라미터 후보를 만들지 않습니다." : ""}`;
   $("recBox").classList.add("show");
   $("btnApplyRec").disabled = !hasChanges || recommendedLogic.warnings.length > 0;
 }
@@ -2791,7 +2805,7 @@ function datasetsOverlap(a, b) {
   return Math.max(0, Math.min(a.lastT, b.lastT) - Math.max(a.firstT, b.firstT)) / 1000;
 }
 
-function deriveCsvMetrics(cycleDurations, overruns, observed, cycles, kinematics) {
+function deriveCsvMetrics(cycleDurations, overruns, indexOverruns, observed, cycles, kinematics) {
   const minCycleSec = cycleDurations.length ? Math.min(...cycleDurations) : 0;
   const maxCycleSec = cycleDurations.length ? Math.max(...cycleDurations) : 0;
   const medianCycleSec = median(cycleDurations);
@@ -2813,8 +2827,11 @@ function deriveCsvMetrics(cycleDurations, overruns, observed, cycles, kinematics
     slowCycles: slowCycles.slice(0, 5),
     cycleVariationPct: medianCycleSec > 0 ? ((maxCycleSec - minCycleSec) / medianCycleSec) * 100 : 0,
     overrunCounts: median(overruns),
+    indexOverrunCounts: median(indexOverruns),
     decelStartPos: median(observed.decelStart),
     creepStartPos: median(observed.creepStart),
+    indexOffPos: median(observed.indexOff),
+    creepTravelCounts: median(observed.creepTravel),
     stopPos: median(observed.stopPos),
   };
 }
@@ -2863,8 +2880,9 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
   const rows = [];
   const cycleDurations = [];
   const overruns = [];
+  const indexOverruns = [];
   const cycles = [];
-  const observed = { decelStart: [], creepStart: [], stopPos: [] };
+  const observed = { decelStart: [], creepStart: [], indexOff: [], creepTravel: [], stopPos: [] };
   const events = Object.fromEntries(Object.keys(definitions).map((key) => [key, { rise: [], fall: [] }]));
   const previous = {};
   const positionWindow = [];
@@ -2899,6 +2917,11 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
         const overrun = Math.max(0, pendingStop.max - pendingStop.base);
         overruns.push(overrun);
         pendingStop.cycle.overrunCounts = overrun;
+        if (Number.isFinite(pendingStop.indexBase)) {
+          const indexOverrun = Math.max(0, pendingStop.max - pendingStop.indexBase);
+          indexOverruns.push(indexOverrun);
+          pendingStop.cycle.indexOverrunCounts = indexOverrun;
+        }
         pendingStop = null;
       }
       moveStart = t;
@@ -2909,8 +2932,10 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
         peakCmd: Math.abs(cmd || 0),
         decelStartPos: NaN,
         creepStartPos: NaN,
+        indexOffPos: NaN,
         stopPos: NaN,
         overrunCounts: 0,
+        indexOverrunCounts: 0,
       };
     }
 
@@ -2931,6 +2956,13 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
           if (key === "creep") {
             observed.creepStart.push(pos);
             if (activeCycle) activeCycle.creepStartPos = pos;
+          }
+        }
+        if (setType === "A" && key === "index" && !on && Number.isFinite(pos)) {
+          observed.indexOff.push(pos);
+          if (activeCycle) {
+            activeCycle.indexOffPos = pos;
+            if (Number.isFinite(activeCycle.creepStartPos)) observed.creepTravel.push(Math.max(0, pos - activeCycle.creepStartPos));
           }
         }
       }
@@ -2969,7 +3001,7 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
           activeCycle.stopT = t;
           activeCycle.stopPos = pos;
           cycles.push(activeCycle);
-          pendingStop = { until: t + 1000, base: pos, max: pos, cycle: activeCycle };
+          pendingStop = { until: t + 1000, base: pos, max: pos, indexBase: activeCycle.indexOffPos, cycle: activeCycle };
           observed.stopPos.push(pos);
         }
         activeCycle = null;
@@ -2980,6 +3012,11 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
           const overrun = Math.max(0, pendingStop.max - pendingStop.base);
           overruns.push(overrun);
           pendingStop.cycle.overrunCounts = overrun;
+          if (Number.isFinite(pendingStop.indexBase)) {
+            const indexOverrun = Math.max(0, pendingStop.max - pendingStop.indexBase);
+            indexOverruns.push(indexOverrun);
+            pendingStop.cycle.indexOverrunCounts = indexOverrun;
+          }
           pendingStop = null;
         }
       }
@@ -2991,10 +3028,15 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
     const overrun = Math.max(0, pendingStop.max - pendingStop.base);
     overruns.push(overrun);
     pendingStop.cycle.overrunCounts = overrun;
+    if (Number.isFinite(pendingStop.indexBase)) {
+      const indexOverrun = Math.max(0, pendingStop.max - pendingStop.indexBase);
+      indexOverruns.push(indexOverrun);
+      pendingStop.cycle.indexOverrunCounts = indexOverrun;
+    }
   }
   if (!sampleCount) throw new Error("Data 행에서 유효한 날짜·시간 샘플을 찾지 못했습니다.");
 
-  const metrics = setType === "A" ? deriveCsvMetrics(cycleDurations, overruns, observed, cycles, kinematics) : deriveBMetrics(events);
+  const metrics = setType === "A" ? deriveCsvMetrics(cycleDurations, overruns, indexOverruns, observed, cycles, kinematics) : deriveBMetrics(events);
   const durationSec = Number.isFinite(firstT) && Number.isFinite(lastT) ? (lastT - firstT) / 1000 : 0;
   const overlay = setType === "A" && indices.pos >= 0 && indices.cmd >= 0
     ? rows.filter((row) => Number.isFinite(row.pos) && Number.isFinite(row.cmd)).map((row) => ({ pos: row.pos, cmd: row.cmd }))
@@ -3012,7 +3054,9 @@ function renderDatasetResult(dataset) {
       <div class="csv-stat"><span>최대 시간</span><strong>${metrics.maxCycleSec ? metrics.maxCycleSec.toFixed(2) + " s" : "-"}</strong></div>
       <div class="csv-stat"><span>느린 사이클</span><strong>${metrics.slowCycleCount}</strong></div>
       <div class="csv-stat"><span>최대 지령</span><strong>${maxCmd ? maxCmd.toFixed(2) + " V" : "-"}</strong></div>
-      <div class="csv-stat"><span>추가 이동 중앙</span><strong>${Math.round(metrics.overrunCounts || 0)} counts</strong></div>` : `
+      <div class="csv-stat"><span>지령 0 후 이동 중앙</span><strong>${Math.round(metrics.overrunCounts || 0)} counts</strong></div>
+      <div class="csv-stat"><span>INDEX OFF 후 이동 중앙</span><strong>${Math.round(metrics.indexOverrunCounts || 0)} counts</strong></div>
+      <div class="csv-stat"><span>CREEP → INDEX OFF 중앙</span><strong>${Math.round(metrics.creepTravelCounts || 0)} counts</strong></div>` : `
       <div class="csv-stat"><span>출발허가</span><strong>${metrics.permitStarts}</strong></div>
       <div class="csv-stat"><span>운전 시작</span><strong>${metrics.runningStarts}</strong></div>
       <div class="csv-stat"><span>호밍 시작</span><strong>${metrics.homingStarts}</strong></div>
@@ -3058,7 +3102,9 @@ function updateCombinedAnalysis() {
   lines.push(`<b>오일 조건:</b> ${oilConditionSummary()} · ISO VG 46은 점도 등급이며 온도만으로 파라미터를 자동 변경하지 않습니다.`);
   if (a) {
     const m = a.metrics;
-    lines.push(`<b>Trend A 측정:</b> ${(a.durationSec / 60).toFixed(1)}분의 ${a.sampleCount.toLocaleString()}개 원본 샘플을 ${m.cycleCount || 0}사이클로 분리했습니다. 중앙 ${m.medianCycleSec ? m.medianCycleSec.toFixed(2) + " s" : "계산 불가"}, 95% ${m.p95CycleSec ? m.p95CycleSec.toFixed(2) + " s" : "계산 불가"}, 최대 ${m.maxCycleSec ? m.maxCycleSec.toFixed(2) + " s" : "계산 불가"}, 정지 지령 후 추가 이동 중앙 ${Math.round(m.overrunCounts || 0)} counts.`);
+    lines.push(`<b>Trend A 측정:</b> ${(a.durationSec / 60).toFixed(1)}분의 ${a.sampleCount.toLocaleString()}개 원본 샘플을 ${m.cycleCount || 0}사이클로 분리했습니다. 중앙 ${m.medianCycleSec ? m.medianCycleSec.toFixed(2) + " s" : "계산 불가"}, 95% ${m.p95CycleSec ? m.p95CycleSec.toFixed(2) + " s" : "계산 불가"}, 최대 ${m.maxCycleSec ? m.maxCycleSec.toFixed(2) + " s" : "계산 불가"}.`);
+    if (m.indexOffPos > 0) lines.push(`<b>INDEX 통과 판단:</b> INDEX OFF 중앙 ${Math.round(m.indexOffPos)} counts → 완전 정지까지 추가 이동 중앙 ${Math.round(m.indexOverrunCounts || 0)} counts. 이는 지령 0 후 이동과 별도이며, 현재 SC2는 INDEX OFF 뒤에 0 V가 되므로 파라미터만으로 0 counts를 보장할 수 없습니다.`);
+    if (m.creepTravelCounts > 0) lines.push(`<b>사이클 단축 여지:</b> CREEP → INDEX OFF 중앙 ${Math.round(m.creepTravelCounts)} counts. 이 거리를 줄이는 후보는 최종 CREEP 전압을 유지한 채 START CREEP COUNT만 소폭 올리는 방식으로 분리 시험합니다.`);
     lines.push(`<b>Trend A 근사:</b> 전체 10 ms 위치값을 약 100 ms 이동창으로 계산한 최대 감속 ${m.maxDecelCounts ? Math.round(m.maxDecelCounts).toLocaleString() + " counts/s²" : "계산 불가"}. 유압모터 실속도는 아니며 counts/mm 입력 전에는 m/s²로 해석하지 않습니다.`);
     if (m.creepStartPos > 0) lines.push(`<b>논리 대조:</b> CSV CREEP 진입 중앙 ${Math.round(m.creepStartPos)} counts · 화면 계산 ${screenLogic.hasCreepBeforeIndex ? Math.round(screenLogic.creepEnter) + " counts" : "계산상 없음"}.`);
     if (m.slowCycleCount) {
