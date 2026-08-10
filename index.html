@@ -573,8 +573,7 @@
     font-size: 0.74rem;
     line-height: 1.5;
   }
-  .advanced-problems { display: none; width: 100%; }
-  body.mode-expert .advanced-problems { display: block; }
+  .advanced-problems { display: block; width: 100%; }
   .mini-problems .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .mini-problems .chip {
     border: 1px solid #3a4550;
@@ -1020,9 +1019,12 @@
       overflow: visible;
     }
     .stage {
+      display: none;
       min-height: 0;
       border-right: 0;
     }
+    body.has-csv .stage { display: flex; }
+    .stage-tools, .chain-box, .operator-strip, .logic-strip, .logic-warning, .creep-guide { display: none !important; }
     .stage-tools {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1185,6 +1187,11 @@
     .help-modal { padding: 8px; }
     .help-head, .help-body { padding: 12px; }
   }
+  /* PC 기본 화면은 실측·추천 중심. 수동 시뮬레이터는 고급 모드에서만 사용한다. */
+  body.mode-basic .stage-tools, body.mode-basic .chain-box { display: none; }
+  body.mode-basic .creep-guide { display: block; background: #101b22; padding: 8px 11px; }
+  body.mode-basic .creep-guide-head, body.mode-basic .creep-guide-item, body.mode-basic .creep-calculation { display: none; }
+  body.mode-basic .creep-guide-flow { display: block; padding: 0; background: transparent; font-size: 0.82rem; }
 </style>
 </head>
 <body class="mode-basic">
@@ -1198,7 +1205,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.3.0</span>
+      <span>v1.4.0</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1351,7 +1358,7 @@
       </div>
 
       <div class="side-actions">
-        <button type="button" class="btn" id="btnCapture">캡처값</button>
+        <button type="button" class="btn" id="btnCapture">기본값</button>
         <button type="button" class="btn tune" id="btnTune">추천 후보 계산</button>
         <button type="button" class="btn apply" id="btnApplyRec" disabled>화면 시험값 적용</button>
       </div>
@@ -1392,21 +1399,6 @@
           </div>
         </div>
         <div class="exclusive-note">‘자동 INDEX 정지점을 지나 더 움직임’과 ‘자동 INDEX 정지점 전에 멈춤’은 반대 증상이므로 동시에 선택되지 않습니다. 여기서 INDEX 정지점은 자동 이송 중 i_conveyor_index가 OFF되는 지점이며 Homing 위치와 다릅니다.</div>
-        <div class="problem-group-label">오일 온도 상태 · 한 개 선택</div>
-        <div class="chips" style="margin-top:6px" id="tempChips">
-          <button type="button" class="chip" data-t="cold">냉간</button>
-          <button type="button" class="chip on" data-t="normal">정상 온도</button>
-          <button type="button" class="chip" data-t="hot">고온</button>
-        </div>
-        <div class="temp-evidence">
-          <label for="OIL_TEMP_C">실제 오일 온도 · 선택 입력 (ISO VG 46)</label>
-          <div class="temp-input-row">
-            <input type="number" id="OIL_TEMP_C" min="-20" max="150" step="0.1" placeholder="예: 45.0" aria-describedby="tempHelp tempSummary">
-            <span>°C</span>
-          </div>
-          <div class="temp-summary" id="tempSummary">실측값 없음 · 조업자 선택: 정상 온도</div>
-          <div class="temp-help" id="tempHelp">ISO VG 46은 40°C 기준 점도 등급입니다. 설비 정상온도 범위는 제조사·유압장치 기준을 확인해야 하므로, 이 화면은 임의의 온도 경계를 자동 적용하지 않습니다.</div>
-        </div>
       </div>
 
       <div class="rec-box" id="recBox">
@@ -1617,6 +1609,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v1.4.0 · 2026-08-11</b>
+      <p>모바일은 CSV 입력 전 설정·증상·추천만 표시하고, CSV 입력 뒤에만 대표 실측 그래프를 표시하도록 단순화했습니다. PC 기본 화면은 수동 시뮬레이터를 숨기고 CREEP 상세식을 한 줄 요약으로 축소했으며, 증상 목록을 통합하고 오일 온도 입력을 제거했습니다.</p>
+    </article>
     <article>
       <b>v1.3.0 · 2026-08-10</b>
       <p>Trend A 실측이 있으면 목적이 다른 5개 단일-파라미터 화면 시험 후보를 표시하고 하나를 선택할 수 있게 했습니다. 그래프의 CSV 실측선은 모든 사이클 중첩 대신 중앙 사이클시간에 가장 가까운 대표 1사이클만 표시합니다.</p>
@@ -3515,6 +3511,7 @@ async function handleCsvFile(file, setType) {
     });
     state[setType === "A" ? "csvA" : "csvB"] = dataset;
     if (setType === "A") {
+      document.body.classList.add("has-csv");
       const representative = dataset.cycles
         .map((cycle, index) => ({ index, cycle, delta: Math.abs((cycle.durationSec || 0) - (dataset.metrics.medianCycleSec || 0)) }))
         .filter((entry) => entry.cycle.trace?.length > 1)
@@ -3575,7 +3572,7 @@ document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el)
     }
   });
 });
-$("OIL_TEMP_C").addEventListener("input", () => {
+$("OIL_TEMP_C")?.addEventListener("input", () => {
   state.rec = null;
   state.previewProfile = null;
   $("recBox").classList.remove("show");
