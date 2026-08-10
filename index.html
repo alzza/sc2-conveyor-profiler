@@ -1178,7 +1178,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.1.1</span>
+      <span>v1.1.2</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1220,8 +1220,8 @@
           <strong>CSM 속도 지령 프로파일</strong>
         </div>
         <div class="operator-kpi">
-          <span>관성·sheet 쏠림</span>
-          <strong class="warn" id="riskKpi">실측 CSV 전 판단 보류</strong>
+          <span>정지 후 encoder 추가 이동</span>
+          <strong class="warn" id="riskKpi">CSV 입력 대기</strong>
         </div>
         <div class="operator-kpi">
           <span>확인된 sheet 중량</span>
@@ -1400,16 +1400,8 @@
       </div>
 
       <div class="physics-panel">
-        <h3>관성·sheet 쏠림 분석 입력</h3>
-        <div class="physics-grid">
-          <label>sheet 최소 kg<input type="number" id="MASS_MIN" value="120" min="1" step="1" /></label>
-          <label>sheet 최대 kg<input type="number" id="MASS_MAX" value="150" min="1" step="1" /></label>
-          <label>엔코더 counts/mm<input type="number" id="COUNTS_PER_MM" placeholder="미확인" min="0" step="0.01" /></label>
-          <label>정지마찰계수 μ<input type="number" id="FRICTION_MU" placeholder="미확인" min="0" max="2" step="0.01" /></label>
-          <label>유압 응답지연 ms<input type="number" id="HYD_LAG_MS" placeholder="CSV로 추정" min="0" step="10" /></label>
-          <label>실측 밀림거리 mm<input type="number" id="OVERRUN_MM" placeholder="미확인" min="0" step="1" /></label>
-        </div>
-        <div class="physics-result" id="physicsResult">중량 120~150 kg와 평지 조건은 반영했습니다. 물리 가속도와 쏠림 위험 계산에는 SC2 실측 CSV와 counts/mm가 더 필요합니다.</div>
+        <h3>실측 계산 범위</h3>
+        <div class="physics-result" id="physicsResult">사용: 엔코더 위치·CSM 지령전압·AO·INDEX·상태 전환·사이클 시간. 제외: 압력·유량·모터 RPM·sheet 미끄러짐·마찰·관성력. 따라서 이 화면은 유압 성능 또는 sheet 쏠림 원인을 계산하지 않습니다.</div>
       </div>
     </aside>
   </div>
@@ -1593,11 +1585,15 @@
     Accel.X · Full.X · Decel.X · Creep.X<br>
     이 파일만으로 프로파일·사이클·지령 후 추가 이동을 분석하고 제한적인 추천 후보를 계산합니다.<br>
     <b style="color:var(--text)">Trend B · 7 pen:</b> 운전·호밍·허가·정지상태 전환시간을 분석하며, A와 날짜·시간이 겹칠 때만 종합 판단에 결합합니다.<br>
-    별도 실속도·압력·유량 피드백이 없으므로 유압 원인은 확정하지 않습니다. 모든 계산은 이 HTML 파일 안에서 오프라인으로 실행됩니다.
+    분석은 엔코더 위치·CSM 지령·AO·INDEX·상태 전환만 사용합니다. 압력·유량·모터 RPM·sheet 미끄러짐은 계산에서 제외하며, 모든 계산은 이 HTML 파일 안에서 오프라인으로 실행됩니다.
   </div>
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v1.1.2 · 2026-08-10</b>
+      <p>압력·유량·모터 RPM·sheet 미끄러짐·마찰·관성력 추정을 분석과 추천에서 제외하고, encoder 위치·지령·상태 전환·사이클 시간만으로 결과를 표시하도록 변경했습니다.</p>
+    </article>
     <article>
       <b>v1.1.1 · 2026-08-10</b>
       <p>우측 현재 프로파일링 값과 CREEP·INDEX OFF 계산을 실시간 연결하고, 입력값은 노란색 [숫자], 계산 결과는 초록색 [숫자]로 구분했습니다.</p>
@@ -1622,7 +1618,7 @@
     <div class="help-body">
       <p class="help-intro">
         여러 증상을 동시에 선택할 수 있습니다. 선택값은 원인을 확정하지 않고 추천 방향의 가중치로만 사용합니다.
-        유압 압력·유량·실속도·정지 밀림을 확인하기 전에는 CSM 프로그램 값 변경안을 생산 적용값으로 보지 않습니다.
+        이 페이지의 추천은 encoder 위치·지령·상태 전환·사이클 시간만을 근거로 한 화면 시험 후보입니다. 생산 적용은 별도 현장 승인과 시험이 필요합니다.
       </p>
       <div class="help-list" id="helpList"></div>
     </div>
@@ -1689,13 +1685,13 @@ const TIPS = {
 const PROBLEM_INFO = {
   sheetSurge: {
     label: "자동 정지 때 sheet가 진행방향 앞으로 쏠림",
-    cause: "컨베이어 감속도가 sheet와 받침면의 정지마찰 한계를 넘거나, 유압모터·체인이 지령 0 이후에도 관성으로 진행할 수 있습니다.",
-    action: "첫 시험은 최고속도·감속기울기를 유지하고 START DECEL만 조금 낮춰 감속 시작을 앞당깁니다. 그래도 남으면 실측 CSV와 안전검토 후 최고속도 조정을 별도로 검토합니다.",
+    cause: "이 화면에서는 지령 0 이후 encoder count가 추가로 증가하는지와 감속·CREEP 전환 위치만 확인합니다.",
+    action: "첫 시험은 최고속도·감속기울기를 유지하고 START DECEL만 조금 낮춰 감속 시작을 앞당긴 뒤, CSV의 추가 이동 count와 사이클 시간을 비교합니다.",
   },
   hard: {
     label: "자동 정지 순간 컨베이어·sheet에 충격",
-    cause: "감속 구간이 짧거나 DECEL SLOPE가 너무 급하고, 밸브 응답 또는 부하제어 회로가 급격히 유량을 차단할 때 나타날 수 있습니다.",
-    action: "첫 시험은 START DECEL만 조금 낮춰 감속 거리를 늘립니다. DECEL SLOPE와 최고속도는 동시에 바꾸지 말고 압력 급상승과 유압모터 떨림·이상소음도 확인합니다.",
+    cause: "감속 구간이 짧거나 DECEL SLOPE가 너무 급하면 encoder 위치 변화와 지령전압 전환이 급해질 수 있습니다.",
+    action: "첫 시험은 START DECEL만 조금 낮춰 감속 거리를 늘립니다. DECEL SLOPE와 최고속도는 동시에 바꾸지 말고 CSV의 추가 이동·사이클 시간을 비교합니다.",
   },
   startShock: {
     label: "자동 1사이클 출발 순간 툭 움직임",
@@ -1704,7 +1700,7 @@ const PROBLEM_INFO = {
   },
   late: {
     label: "자동 1사이클이 INDEX 센서 OFF 정지점을 지나 더 움직임",
-    cause: "감속 시작이 늦거나 유압 응답지연·오일 온도·부하 증가로 실제 속도가 지령을 늦게 따라갈 수 있습니다.",
+    cause: "감속 시작이 늦거나 INDEX OFF 이후 encoder 위치가 계속 증가하는 경우입니다.",
     action: "START DECEL COUNTS를 낮춰 자동운전 감속을 앞당기는 방향을 검토하고 CSV에서 지령 0 이후 엔코더 이동을 확인합니다. Homing 위치 지나침과는 별도 증상입니다.",
   },
   early: {
@@ -1714,33 +1710,33 @@ const PROBLEM_INFO = {
   },
   pulse: {
     label: "자동운전 중 속도가 반복적으로 빨라졌다 느려짐",
-    cause: "밸브 스풀 sticking, 유량·압력 맥동, 공기 혼입, 체인 장력 불균일 또는 엔코더 노이즈 가능성이 있습니다.",
-    action: "파라미터 변경보다 압력·AO·위치의 동시 트렌드를 먼저 수집합니다.",
+    cause: "지령전압·AO·encoder 위치가 동일 조건에서 반복적으로 변하는지 확인이 필요한 증상입니다.",
+    action: "파라미터를 변경하기 전에 AO·지령전압·encoder 위치·상태 전환을 10 ms로 비교합니다.",
   },
   slow: {
     label: "자동 1사이클 시간이 평소보다 길어짐",
-    cause: "최고속도 지령이 낮거나 냉간 점도, 공급유량 부족, 내부 누설 또는 높은 부하 영향일 수 있습니다.",
-    action: "원인 확인 전 속도만 올리지 말고 냉간/정상 온도 CSV와 사이클 시간을 비교합니다.",
+    cause: "동일한 프로파일에서 사이클 시간이 평소 범위를 벗어났는지 확인이 필요한 증상입니다.",
+    action: "속도를 바로 올리지 말고 같은 프로파일 CSV의 중앙·P90 사이클 시간을 비교합니다.",
   },
   home: {
     label: "수동 Homing 때 INDEX 센서를 지나쳐 더 움직임",
-    cause: "HOMING SPEED가 높거나 인덱스 센서 응답 이후 실제 유압 구동이 늦게 멈출 수 있습니다.",
+    cause: "HOMING SPEED가 높거나 INDEX 센서 전환 이후 encoder 위치가 계속 증가하는 경우입니다.",
     action: "HOMING SPEED를 낮추고 센서 전환부터 엔코더 정지까지 지연을 측정합니다.",
   },
   stopDrift: {
     label: "자동운전 지령이 0이 된 뒤 엔코더 위치가 계속 증가",
-    cause: "오버러닝 부하, 내부 누설, 밸브 중립 누설, 체인 탄성 복원 또는 브레이크/부하제어 문제 가능성이 있습니다.",
-    action: "지령 0, AO 0, 위치 변화, 압력 A/B를 함께 확인합니다. CSM 프로파일만으로 원인을 확정할 수 없습니다.",
+    cause: "지령 0과 AO 0 이후에도 encoder 위치가 증가하는 관측값입니다.",
+    action: "지령 0, AO 0, encoder 위치 변화와 INDEX 상태를 함께 확인합니다. 이 화면은 원인을 추정하지 않습니다.",
   },
   cycleVariation: {
     label: "같은 조건인데 자동 정지 count가 사이클마다 다름",
-    cause: "오일 온도·부하·마찰·센서 타이밍 또는 엔코더 누적 조건이 사이클마다 달라질 수 있습니다.",
+    cause: "정지 위치·DECEL·CREEP·INDEX 전환 위치가 사이클마다 달라지는 관측값입니다.",
     action: "10 ms 간격으로 5분간 연속 수집해 사이클 시간과 정지 위치 편차를 비교합니다.",
   },
   cavitation: {
     label: "감속 중 모터 떨림·소음",
-    cause: "감속할 때 유압모터가 덜덜 떨리거나 거친 소리가 반복되는 경우입니다. 오일 공급 부족, 공기 혼입 또는 감속 중 압력 불안정 여부를 확인해야 합니다.",
-    action: "같은 동작을 계속 반복하지 말고 감속 구간의 압력, 오일 상태와 모터 진동을 점검합니다.",
+    cause: "감속 구간에서 소음·진동이 관측되는 증상이며, 이 페이지는 해당 원인을 계산하지 않습니다.",
+    action: "파라미터 자동 추천에서 제외하고 설비 점검 절차에 따라 별도 확인합니다.",
   },
   chainShock: {
     label: "ACCEL·DECEL·CREEP 전환 순간 체인 충격음",
@@ -1754,17 +1750,17 @@ const PROBLEM_INFO = {
   },
   sensor: {
     label: "INDEX 센서 OFF 이후 최종 정지 count가 매번 다름",
-    cause: "센서 채터링·설치 위치·스캔 타이밍 또는 센서 전환 후 유압 응답지연 가능성이 있습니다.",
+    cause: "INDEX 센서 전환 시점과 최종 encoder 정지 위치의 반복성을 확인해야 합니다.",
     action: "i_conveyor_index, 상태 Step, 지령전압, 엔코더 위치를 10 ms로 동시에 수집합니다.",
   },
   directionDiff: {
     label: "같은 수동 속도 설정인데 전진과 후진 실제 속도가 다름",
-    cause: "밸브 유량 특성, 모터 누설, 부하 방향 또는 polarity/수동속도 적용 차이 가능성이 있습니다.",
+    cause: "양방향 CSV에서 지령전압·AO·encoder 위치 변화율이 다른지 확인해야 합니다.",
     action: "동일 온도·무부하 조건에서 양방향 AO와 엔코더 속도를 비교합니다.",
   },
   loadDiff: {
     label: "120 kg와 150 kg sheet에서 실제 이동속도·사이클시간이 다름",
-    cause: "유압 공급 여유, 내부 누설, 압력보상 또는 마찰 변화가 120~150 kg 범위에서 드러날 수 있습니다.",
+    cause: "120 kg와 150 kg 조건에서 encoder 위치 변화율과 사이클 시간이 다른지 확인해야 합니다.",
     action: "sheet 중량 구간별로 사이클 시간·최고속도·정지 밀림을 비교합니다.",
   },
 };
@@ -2489,11 +2485,11 @@ function recommend() {
     why.push("Homing 중 INDEX 센서를 지나침: 자동 프로파일은 건드리지 않고 HOMING SPEED만 5% 낮춤");
   }
   if (probs.has("slow")) {
-    why.push("전체 느림: 실측 사이클과 유압 상태 없이 MAX를 자동으로 올리지 않음");
+    why.push("전체 느림: 실측 사이클 시간만으로 MAX를 자동으로 올리지 않음");
   }
   if (["pulse", "cavitation", "chainShock", "skew", "sensor", "directionDiff", "loadDiff", "cycleVariation"].some((key) => probs.has(key))) {
     diagnosisFirst = true;
-    why.push("반복 편차·소음·비틀림·센서 불안정: 고정 파라미터보다 기계·유압·센서 원인 확인이 우선");
+    why.push("반복 편차·소음·비틀림·센서 불안정: 이 화면은 자동 파라미터 후보를 만들지 않음");
   }
   if (aMetric) {
     why.push(`Trend A 측정: ${aMetric.cycleCount || 0}사이클 · 중앙 ${aMetric.medianCycleSec ? aMetric.medianCycleSec.toFixed(2) + " s" : "계산 불가"} · 정지 후 추가 이동 중앙 ${Math.round(aMetric.overrunCounts || 0)} counts`);
@@ -2504,7 +2500,7 @@ function recommend() {
     }
     if (aMetric.cycleVariationPct > 10) {
       diagnosisFirst = true;
-      why.push(`Trend A 경고: 사이클시간 편차 ${aMetric.cycleVariationPct.toFixed(1)}% → 고정 파라미터 변경보다 유압·부하 변동 확인 우선`);
+      why.push(`Trend A 경고: 사이클시간 편차 ${aMetric.cycleVariationPct.toFixed(1)}% → 이 화면은 고정 파라미터 후보를 만들지 않음`);
     }
     if (aMetric.creepStartPos > 0 && currentLogic.hasCreepBeforeIndex) {
       const error = aMetric.creepStartPos - currentLogic.creepEnter;
@@ -2558,69 +2554,28 @@ function recommend() {
     : "조업 증상만 반영한 추천 가설";
   const hasChanges = rows.some(([, a, b]) => Math.abs(Number(a) - Number(b)) > 1e-9);
   const logicCompare = `CREEP 진입 계산 ${currentLogic.hasCreepBeforeIndex ? Math.round(currentLogic.creepEnter) + " counts" : "INDEX 우선"} → ${recommendedLogic.hasCreepBeforeIndex ? Math.round(recommendedLogic.creepEnter) + " counts" : "INDEX 우선"}, CREEP 이동 ${Math.round(currentLogic.creepTravel)} → ${Math.round(recommendedLogic.creepTravel)} counts`;
-  $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 기계·유압·센서 확인을 먼저 수행하십시오." : ""}`;
+  $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 이 화면은 파라미터 후보를 만들지 않습니다." : ""}`;
   $("recBox").classList.add("show");
   $("btnApplyRec").disabled = !hasChanges || recommendedLogic.warnings.length > 0;
 }
 
-/* ----- Physical-risk status: only calculate when evidence exists ----- */
+/* ----- Encoder-only CSV status: no physical or hydraulic inference ----- */
 function updatePhysics() {
-  const massMin = g("MASS_MIN", 120);
-  const massMax = g("MASS_MAX", 150);
-  const countsPerMm = g("COUNTS_PER_MM", 0);
-  const mu = g("FRICTION_MU", 0);
-  const lagMs = g("HYD_LAG_MS", 0);
-  const manualOverrun = g("OVERRUN_MM", 0);
   const metric = state.csvA?.metrics || null;
-  const lines = [`확정 입력: sheet ${round(massMin)}~${round(massMax)} kg · 평지`];
-  let kpi = "실측 CSV 전 판단 보류";
-  let kpiClass = "warn";
-
-  if (!metric) {
-    lines.push("SC2 Trend CSV가 없어 실제 유압 응답·감속도는 아직 계산하지 않습니다.");
-  } else if (!(countsPerMm > 0)) {
-    lines.push(`CSV 근사 최대 감속(약 100 ms 이동창): ${metric.maxDecelCounts ? Math.round(metric.maxDecelCounts).toLocaleString() : "계산 불가"} counts/s²`);
-    lines.push("counts/mm가 없어 m/s²와 쏠림 한계로 변환하지 않습니다.");
-    kpi = "counts/mm 입력 필요";
-  } else if (metric.maxDecelCounts > 0) {
-    const decel = metric.maxDecelCounts / countsPerMm / 1000;
-    const requiredMu = decel / 9.80665;
-    const forceMin = massMin * decel;
-    const forceMax = massMax * decel;
-    lines.push(`CSV 근사 최대 감속: ${decel.toFixed(3)} m/s² · 관성력 ${Math.round(forceMin)}~${Math.round(forceMax)} N`);
-    lines.push(`평지에서 미끄러지지 않기 위한 이론상 최소 정지마찰계수: μ ${requiredMu.toFixed(3)} 이상`);
-    if (mu > 0) {
-      const ratio = decel / (mu * 9.80665);
-      if (ratio >= 1) {
-        kpi = `쏠림 가능성 높음 · 한계의 ${ratio.toFixed(2)}배`;
-        kpiClass = "warn";
-        lines.push(`입력 μ ${mu} 기준으로 감속도가 마찰 한계를 넘습니다. 현장 확인이 필요합니다.`);
-      } else if (ratio >= 0.7) {
-        kpi = `쏠림 여유 작음 · 한계의 ${ratio.toFixed(2)}배`;
-        kpiClass = "warn";
-        lines.push(`입력 μ ${mu} 기준으로 마찰 한계에 가깝습니다.`);
-      } else {
-        kpi = `계산상 여유 있음 · 한계의 ${ratio.toFixed(2)}배`;
-        kpiClass = "good";
-        lines.push(`입력 μ ${mu} 기준 이론값은 한계 아래입니다. 오염·물기·오일 조건은 별도 확인합니다.`);
-      }
-    } else {
-      kpi = `필요 마찰계수 μ ${requiredMu.toFixed(3)}`;
-      lines.push("실제 접촉면 μ가 없어 최종 위험등급은 보류합니다.");
-    }
+  const lines = ["사용: 엔코더 위치·CSM 지령전압·AO·INDEX·상태 전환·사이클 시간.", "제외: 압력·유량·모터 RPM·sheet 미끄러짐·마찰·관성력."];
+  const kpi = !metric
+    ? "CSV 입력 대기"
+    : `추가 이동 중앙 ${Math.round(metric.overrunCounts || 0)} counts`;
+  if (metric) {
+    lines.push(`CSV 관측: 최대 위치 변화율 ${metric.maxSpeedCounts ? Math.round(metric.maxSpeedCounts).toLocaleString() : "계산 불가"} counts/s · 위치 감속 근사 ${metric.maxDecelCounts ? Math.round(metric.maxDecelCounts).toLocaleString() : "계산 불가"} counts/s²`);
+    lines.push("위 값은 encoder count 기반 반복성 지표이며, 물리 힘·유압 성능·sheet 거동으로 변환하지 않습니다.");
   } else {
-    lines.push("CSV에서 안정적인 위치 감속도를 계산하지 못했습니다. 태그와 사이클 구간을 확인하십시오.");
+    lines.push("CSV를 첨부하면 INDEX OFF 이후 encoder 추가 이동과 사이클 편차를 표시합니다.");
   }
-
-  let overrunMm = manualOverrun;
-  if (!(overrunMm > 0) && metric?.overrunCounts > 0 && countsPerMm > 0) overrunMm = metric.overrunCounts / countsPerMm;
-  if (overrunMm > 0) lines.push(`정지 지령 후 밀림: 약 ${overrunMm.toFixed(1)} mm`);
-  if (lagMs > 0) lines.push(`입력 유압 응답지연: ${Math.round(lagMs)} ms · 압력/유량 태그 없이 원인 확정 불가`);
-
   $("physicsResult").innerHTML = lines.join("<br>");
   const risk = $("riskKpi");
   risk.textContent = kpi;
-  risk.className = kpiClass;
+  risk.className = metric?.overrunCounts > 0 ? "warn" : "";
 }
 
 /* ----- Help page ----- */
@@ -3355,10 +3310,6 @@ $("OIL_TEMP_C").addEventListener("input", () => {
   updateTemperatureEvidence();
   updateCombinedAnalysis();
 });
-document.querySelectorAll(".physics-panel input, .physics-panel select").forEach((el) => {
-  el.addEventListener("input", updatePhysics);
-});
-
 let resizeTimer = 0;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
