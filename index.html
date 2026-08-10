@@ -652,6 +652,11 @@
     color: #c6b878;
     line-height: 1.55;
   }
+  .candidate-choices { display: grid; gap: 6px; margin: 8px 0; }
+  .candidate-choice { width: 100%; text-align: left; color: var(--text); background: #17202a; border: 1px solid #3b4d5b; border-radius: 7px; padding: 7px 8px; cursor: pointer; }
+  .candidate-choice.on { border-color: var(--cyan); background: #123039; }
+  .candidate-choice b { display: block; color: #7fdbff; font-size: 0.8rem; }
+  .candidate-choice small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.72rem; line-height: 1.35; }
 
   /* Expert extras under HMI */
   .expert-extra {
@@ -1193,7 +1198,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.2.2</span>
+      <span>v1.3.0</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1283,7 +1288,7 @@
         <div class="graph-legend" aria-label="그래프 범례">
           <span class="legend-item"><i class="legend-line blue"></i>CSM 계산 지령</span>
           <span class="legend-item"><i class="legend-line green"></i>1사이클 실행 궤적</span>
-          <span class="legend-item"><i class="legend-line yellow"></i>CSV 실측 지령</span>
+          <span class="legend-item"><i class="legend-line yellow"></i>CSV 대표 1사이클 실측</span>
           <label class="cross-toggle" title="그래프 위 마우스 위치의 계산 좌표를 표시합니다">
             <input type="checkbox" id="showCrosshair" checked>
             십자선 좌표
@@ -1406,6 +1411,7 @@
 
       <div class="rec-box" id="recBox">
         <h4>추천 후보 (화면 미적용)</h4>
+        <div class="candidate-choices" id="candidateChoices"></div>
         <table id="recTable"></table>
         <div class="rec-why" id="recWhy"></div>
       </div>
@@ -1611,6 +1617,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v1.3.0 · 2026-08-10</b>
+      <p>Trend A 실측이 있으면 목적이 다른 5개 단일-파라미터 화면 시험 후보를 표시하고 하나를 선택할 수 있게 했습니다. 그래프의 CSV 실측선은 모든 사이클 중첩 대신 중앙 사이클시간에 가장 가까운 대표 1사이클만 표시합니다.</p>
+    </article>
     <article>
       <b>v1.2.2 · 2026-08-10</b>
       <p>Trend A에서 CREEP→INDEX OFF 거리와 INDEX OFF→완전 정지 추가 이동을 분리 표시했습니다. ‘사이클이 느림’과 ‘INDEX를 지남’을 함께 선택하면 MIN 전압을 유지하고 START CREEP COUNT만 소폭 올리는 화면 시험 후보를 제시하며, INDEX OFF 후 이동 증가는 후보 폐기 기준으로 표시합니다.</p>
@@ -1820,6 +1830,10 @@ const state = {
   temp: "normal",
   oilTempC: NaN,
   rec: null,
+  candidates: [],
+  selectedCandidateId: "",
+  selectedTrendCycle: -1,
+  previewProfile: null,
   before: null,
   csvA: null,
   csvB: null,
@@ -2145,7 +2159,7 @@ function prepareCanvas(canvas, fallbackW, fallbackH) {
 
 /* ----- Draw static graph + live marker ----- */
 function drawGraph() {
-  const p = readP();
+  const p = state.previewProfile || readP();
   if (p.xMax < p.startCreep + 200) p.xMax = p.startCreep + 400;
   const logic = deriveProfileLogic(p);
   updateLogicSummary(p, logic);
@@ -2229,14 +2243,15 @@ function drawGraph() {
   }
   ctx.stroke();
 
-  // measured Studio 5000 CSV overlay (position vs command voltage)
-  if (state.csvA?.overlay?.length > 1) {
+  // One representative measured cycle: avoids the confusing overlap of every CSV cycle.
+  const measuredTrace = state.csvA?.cycles?.[state.selectedTrendCycle]?.trace || state.csvA?.overlay || [];
+  if (measuredTrace.length > 1) {
     ctx.strokeStyle = "#f5c042";
     ctx.lineWidth = 1.6;
     ctx.globalAlpha = 0.9;
     ctx.beginPath();
     let started = false;
-    for (const point of state.csvA.overlay) {
+    for (const point of measuredTrace) {
       if (!Number.isFinite(point.pos) || !Number.isFinite(point.cmd)) continue;
       const x = xOf(Math.max(0, Math.min(point.pos, p.xMax)));
       const y = yOf(Math.abs(point.cmd));
@@ -2570,6 +2585,54 @@ function updateStatus() {
   updateCycleTimeDisplay();
 }
 
+function renderTrendCandidate(candidate) {
+  state.selectedCandidateId = candidate.id;
+  state.rec = { ...candidate.values };
+  state.previewProfile = { ...candidate.values };
+  state.profileSource = `${candidate.title} · 화면 미적용 미리보기`;
+  const cur = readP();
+  const fields = [
+    ["START DECEL COUNTS", cur.startDecel, state.rec.startDecel],
+    ["START CREEP COUNT", cur.startCreep, state.rec.startCreep],
+    ["DECEL SLOPE", cur.decelSlope, state.rec.decelSlope],
+    ["INDEX SPEED MIN", cur.vmin, state.rec.vmin],
+  ];
+  $("candidateChoices").innerHTML = state.candidates.map((item) =>
+    `<button type="button" class="candidate-choice ${item.id === candidate.id ? "on" : ""}" data-candidate-id="${item.id}"><b>${esc(item.title)}</b><small>${esc(item.characteristic)}</small></button>`
+  ).join("");
+  document.querySelectorAll(".candidate-choice").forEach((button) => {
+    button.onclick = () => {
+      const next = state.candidates.find((item) => item.id === button.dataset.candidateId);
+      if (next) { renderTrendCandidate(next); drawGraph(); }
+    };
+  });
+  $("recTable").innerHTML = `<tr><th>항목</th><th>현재</th><th>선택 시험값</th></tr>` + fields.map(([name, before, after]) => {
+    const changed = Math.abs(before - after) > 1e-9;
+    return `<tr><td>${name}</td><td style="color:#889">${round(before)}</td><td style="color:${changed ? "#7fdbff" : "#77838c"}">${round(after)}${changed ? " ◀" : " · 유지"}</td></tr>`;
+  }).join("");
+  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br>한 번에 이 후보의 변경 항목만 화면에 적용해 5분 Trend로 비교하십시오. PLC 자동 적용은 하지 않습니다.`;
+  $("btnApplyRec").disabled = false;
+  $("recBox").classList.add("show");
+}
+
+function recommendFromTrend(cur, metric) {
+  const span = Math.max(100, cur.startCreep - cur.startDecel);
+  const creep = Math.round(metric.creepTravelCounts || 0);
+  const indexMove = Math.round(metric.indexOverrunCounts || 0);
+  const evidence = `${metric.cycleCount}사이클 · 중앙 ${metric.medianCycleSec.toFixed(2)} s · CREEP→INDEX OFF ${creep} counts · INDEX OFF 후 ${indexMove} counts`;
+  const shiftFast = Math.max(50, Math.min(100, Math.round(span * 0.12)));
+  const shiftBalance = Math.max(30, Math.min(60, Math.round(span * 0.07)));
+  const candidates = [
+    { id: "cycle", title: "① 사이클 단축 · 저속 접근 유지", values: { ...cur, startCreep: cur.startCreep + shiftFast }, evidence, characteristic: `START CREEP +${shiftFast}: CREEP 진입을 뒤로 옮겨 저속 이동거리를 줄입니다. INDEX SPEED MIN ${round(cur.vmin)} V는 유지합니다.`, guard: "INDEX OFF 후 추가 이동의 중앙·최대값이 현재보다 커지면 폐기" },
+    { id: "balance", title: "② 균형 · 작은 폭 사이클 단축", values: { ...cur, startCreep: cur.startCreep + shiftBalance }, evidence, characteristic: `START CREEP +${shiftBalance}: ①보다 작은 한 단계 시험입니다. INDEX 직전 CREEP 전압은 유지합니다.`, guard: "사이클 중앙시간이 줄고 INDEX OFF 후 이동이 증가하지 않을 때만 다음 단계" },
+    { id: "gentle", title: "③ 완만 감속 · CREEP 구간 일부 단축", values: { ...cur, decelSlope: round(cur.decelSlope * 0.95) }, evidence, characteristic: `DECEL SLOPE ${round(cur.decelSlope)} → ${round(cur.decelSlope * 0.95)}: 감속선을 완만하게 하되 최종 MIN은 유지합니다.`, guard: "DECEL 전환 충격·INDEX OFF 후 이동·사이클 시간을 함께 비교" },
+    { id: "index-min", title: "④ INDEX 통과 감소 · 최종 저속 낮춤", values: { ...cur, vmin: round(Math.max(0.1, cur.vmin - 0.03)) }, evidence, characteristic: `INDEX SPEED MIN ${round(cur.vmin)} → ${round(Math.max(0.1, cur.vmin - 0.03))} V: INDEX 직전 지령을 낮춰 추가 이동 감소를 확인합니다. 사이클 시간은 늘 수 있습니다.`, guard: "저속 실속·INDEX 미도달이 없고 INDEX OFF 후 이동이 감소할 때만 유지" },
+    { id: "index-decel", title: "⑤ INDEX 통과 감소 · 감속 조기 시작", values: { ...cur, startDecel: Math.max(200, cur.startDecel - Math.max(30, Math.round(span * 0.06))) }, evidence, characteristic: `START DECEL을 ${Math.max(30, Math.round(span * 0.06))} counts 앞당겨 INDEX 접근 지령을 낮춥니다. 사이클 시간은 늘 수 있습니다.`, guard: "sheet 쏠림·정지 충격이 줄고 INDEX OFF 후 이동이 감소할 때만 유지" },
+  ];
+  state.candidates = candidates;
+  renderTrendCandidate(candidates[0]);
+}
+
 /* ----- Conservative recommendation candidate ----- */
 function recommend() {
   const cur = readP();
@@ -2578,6 +2641,12 @@ function recommend() {
   const aMetric = state.csvA?.metrics || null;
   const bMetric = state.csvB?.metrics || null;
   const currentLogic = deriveProfileLogic(cur);
+  if (aMetric?.cycleCount >= 3 && aMetric.creepTravelCounts > 0) {
+    recommendFromTrend(cur, aMetric);
+    return;
+  }
+  state.candidates = [];
+  $("candidateChoices").innerHTML = "";
   const span = Math.max(100, cur.startCreep - cur.startDecel);
   const rec = { ...cur };
   const why = [];
@@ -2936,6 +3005,7 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
         stopPos: NaN,
         overrunCounts: 0,
         indexOverrunCounts: 0,
+        trace: [],
       };
     }
 
@@ -2970,6 +3040,9 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
     }
 
     if (setType === "A") {
+      if (activeCycle && activeCycle.trace.length < 2000 && Number.isFinite(pos) && Number.isFinite(cmd)) {
+        activeCycle.trace.push({ pos, cmd, index: values.index, accel: values.accel, full: values.full, decel: values.decel, creep: values.creep });
+      }
       if (moving && activeCycle) activeCycle.peakCmd = Math.max(activeCycle.peakCmd, Math.abs(cmd || 0));
       if (moving && Number.isFinite(pos)) {
         positionWindow.push({ t, pos, decel: values.decel });
@@ -3353,6 +3426,7 @@ $("btnCapture").onclick = () => {
   stopCycle(true);
   disableLinkedTune("OFF: 캡처값 복원으로 연동 기준을 초기화했습니다.");
   state.rec = null;
+  state.previewProfile = null;
   state.profileSource = "캡처값 기준";
   $("recBox").classList.remove("show");
   $("btnApplyRec").disabled = true;
@@ -3366,6 +3440,7 @@ $("btnApplyRec").onclick = () => {
   disableLinkedTune("OFF: 추천 시험값 적용으로 연동 기준을 초기화했습니다.");
   state.profileSource = "추천 시험값 적용 기준";
   state.rec = null;
+  state.previewProfile = null;
   $("recBox").classList.remove("show");
   $("btnApplyRec").disabled = true;
   stopCycle(true);
@@ -3395,6 +3470,7 @@ document.querySelectorAll("#probChips .chip").forEach((b) => {
       b.setAttribute("aria-pressed", "true");
     }
     state.rec = null;
+    state.previewProfile = null;
     $("recBox").classList.remove("show");
     $("btnApplyRec").disabled = true;
   };
@@ -3405,6 +3481,7 @@ document.querySelectorAll("#tempChips .chip").forEach((b) => {
     b.classList.add("on");
     state.temp = b.dataset.t;
     state.rec = null;
+    state.previewProfile = null;
     $("recBox").classList.remove("show");
     $("btnApplyRec").disabled = true;
     updateTemperatureEvidence();
@@ -3437,7 +3514,15 @@ async function handleCsvFile(file, setType) {
       resultEl.innerHTML = `<h3>Trend ${setType} 분석 중 · ${progress}%</h3><p>데이터를 나누어 처리하고 있습니다. 이 페이지를 닫지 마십시오.</p>`;
     });
     state[setType === "A" ? "csvA" : "csvB"] = dataset;
+    if (setType === "A") {
+      const representative = dataset.cycles
+        .map((cycle, index) => ({ index, cycle, delta: Math.abs((cycle.durationSec || 0) - (dataset.metrics.medianCycleSec || 0)) }))
+        .filter((entry) => entry.cycle.trace?.length > 1)
+        .sort((a, b) => a.delta - b.delta)[0];
+      state.selectedTrendCycle = representative ? representative.index : -1;
+    }
     state.rec = null;
+    state.previewProfile = null;
     $("recBox").classList.remove("show");
     $("btnApplyRec").disabled = true;
     nameEl.textContent = `${file.name} · ${dataset.sampleCount.toLocaleString()} samples · 로컬 분석 완료`;
@@ -3481,6 +3566,7 @@ document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el)
     const linked = $("linkedTune").checked && applyLinkedTune(el.id);
     if (!linked) state.profileSource = "직접 입력값 기준";
     state.rec = null;
+    state.previewProfile = null;
     $("recBox").classList.remove("show");
     $("btnApplyRec").disabled = true;
     if (!state.running) {
@@ -3491,6 +3577,7 @@ document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el)
 });
 $("OIL_TEMP_C").addEventListener("input", () => {
   state.rec = null;
+  state.previewProfile = null;
   $("recBox").classList.remove("show");
   $("btnApplyRec").disabled = true;
   updateTemperatureEvidence();
