@@ -1193,7 +1193,7 @@
     <h1>SC2 · CONVEYOR PROFILING</h1>
     <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
     <span class="app-meta">
-      <span>v1.2.0</span>
+      <span>v1.2.1</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1311,7 +1311,7 @@
           </div>
           <div class="hmi-cell" data-key="START_CREEP_COUNT">
             <div class="lbl">START CREEP COUNT</div>
-            <div class="box"><input type="number" inputmode="numeric" id="START_CREEP_COUNT" step="1" value="4550" /></div>
+            <div class="box"><input type="number" inputmode="numeric" id="START_CREEP_COUNT" step="1" value="4577" /></div>
           </div>
           <div class="hmi-cell" data-key="INDEX_SPEED_MAX">
             <div class="lbl">INDEX SPEED MAX</div>
@@ -1323,15 +1323,15 @@
           </div>
           <div class="hmi-cell" data-key="INDEX_SPEED_MIN">
             <div class="lbl">INDEX SPEED MIN</div>
-            <div class="box"><input type="number" inputmode="decimal" id="INDEX_SPEED_MIN" step="0.01" value="2.50" /></div>
+            <div class="box"><input type="number" inputmode="decimal" id="INDEX_SPEED_MIN" step="0.01" value="2.43" /></div>
           </div>
           <div class="hmi-cell" data-key="DECEL_SLOPE">
             <div class="lbl">DECEL SLOPE</div>
-            <div class="box"><input type="number" inputmode="decimal" id="DECEL_SLOPE" step="0.01" value="-1.37" /></div>
+            <div class="box"><input type="number" inputmode="decimal" id="DECEL_SLOPE" step="0.01" value="-1.14" /></div>
           </div>
           <div class="hmi-cell" data-key="START_DECEL_COUNTS">
             <div class="lbl">START DECEL COUNTS</div>
-            <div class="box"><input type="number" inputmode="numeric" id="START_DECEL_COUNTS" step="1" value="3900" /></div>
+            <div class="box"><input type="number" inputmode="numeric" id="START_DECEL_COUNTS" step="1" value="3924" /></div>
           </div>
           <div class="hmi-cell" data-key="HOMING_SPEED">
             <div class="lbl">HOMING SPEED</div>
@@ -1612,6 +1612,10 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
+      <b>v1.2.1 · 2026-08-10</b>
+      <p>사용자가 업로드한 수정 적용본 HMI 값(START CREEP 4,577 · START DECEL 3,924 · MIN 2.43 V · DECEL SLOPE −1.14)을 화면·캡처 기본값으로 변경했습니다. PLC 자동 적용은 하지 않습니다.</p>
+    </article>
+    <article>
       <b>v1.2.0 · 2026-08-10</b>
       <p>실제 SC2 감속식 기준의 연동 시험 후보(기본 OFF)를 추가했습니다. 연결된 값만 화면에서 조정하며 PLC에는 자동 적용하지 않습니다.</p>
     </article>
@@ -1660,13 +1664,13 @@
 document.body.classList.add("js-ready");
 
 const CAPTURE = {
-  START_CREEP_COUNT: 4550,
-  START_DECEL_COUNTS: 3900,
+  START_CREEP_COUNT: 4577,
+  START_DECEL_COUNTS: 3924,
   ACCEL_SLOPE: 1.50,
-  DECEL_SLOPE: -1.37,
+  DECEL_SLOPE: -1.14,
   INDEX_SPEED_START: 3.00,
   INDEX_SPEED_MAX: 3.13,
-  INDEX_SPEED_MIN: 2.50,
+  INDEX_SPEED_MIN: 2.43,
   HOMING_SPEED: 1.27,
   FMM_REV_SPEED: 1.90,
   TARGET_COUNTS: 5000,
@@ -1869,13 +1873,13 @@ function temperatureRecommendationReason() {
 
 function readP() {
   return {
-    startCreep: g("START_CREEP_COUNT", 4550),
-    startDecel: g("START_DECEL_COUNTS", 3900),
+    startCreep: g("START_CREEP_COUNT", 4577),
+    startDecel: g("START_DECEL_COUNTS", 3924),
     accelSlope: g("ACCEL_SLOPE", 1.5),
-    decelSlope: g("DECEL_SLOPE", -1.37),
+    decelSlope: g("DECEL_SLOPE", -1.14),
     vstart: g("INDEX_SPEED_START", 3),
     vmax: g("INDEX_SPEED_MAX", 3.13),
-    vmin: g("INDEX_SPEED_MIN", 2.5),
+    vmin: g("INDEX_SPEED_MIN", 2.43),
     vhome: g("HOMING_SPEED", 1.27),
     vmanual: g("FMM_REV_SPEED", 1.9),
     target: g("TARGET_COUNTS", 5000),
