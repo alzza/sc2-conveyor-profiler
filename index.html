@@ -683,6 +683,16 @@
     font-size: 0.8rem;
   }
   body.mode-expert .expert-extra { display: block; }
+  .expert-profile-status {
+    margin: 0 0 8px;
+    padding: 7px 8px;
+    border: 1px solid #3d6075;
+    border-radius: 6px;
+    background: #101b24;
+    color: #8edcff;
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
   .expert-extra label {
     display: grid;
     grid-template-columns: 1fr 80px;
@@ -1222,7 +1232,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.2</span>
+      <span>v2.0.3</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1435,6 +1445,7 @@
 
       <div class="expert-extra">
         <div style="font-weight:800;margin-bottom:6px;color:var(--purple)">고급 · CSM 프로그램 추가값</div>
+        <div class="expert-profile-status" id="expertProfileStatus">현재 화면 입력값으로 시뮬레이션합니다.</div>
         <label>TARGET COUNTS <input type="number" id="TARGET_COUNTS" value="5000" step="1" /></label>
         <label>POLARITY <input type="number" id="POLARITY" value="1.90" step="0.01" /></label>
         <label>INDEX 위치 시뮬 <input type="number" id="INDEX_POS" value="4800" step="1" /></label>
@@ -1627,6 +1638,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v2.0.3 · 2026-08-14</b>
+      <p>CSV로 만든 선택 시나리오를 고급 시뮬레이션에도 연결했습니다. 고급 탭에서 ‘1사이클 동작’을 누르면 선택 시나리오 값으로 해당 1사이클을 실행하며, 화면 입력값은 ‘선택값 화면 적용’을 누르기 전까지 바뀌지 않습니다. FWD_REV_SPEED 툴팁 제목도 수정했습니다.</p>
+    </article>
     <article>
       <b>v2.0.2 · 2026-08-14</b>
       <p>그래프 범례의 십자선 안내를 제거했습니다. CSV/현재값 오토튠 뒤 추천 시험 시나리오를 증상 선택보다 먼저 표시합니다. ‘값 연결해서 조정’은 단순 비례 변경이 아니라, SC2 식에서 가속 종료·CREEP 진입 기준 위치를 유지하도록 관련 값만 재계산한다고 명확히 표시했습니다.</p>
@@ -1860,6 +1875,7 @@ const state = {
   selectedCandidateId: "",
   selectedTrendCycle: -1,
   previewProfile: null,
+  simProfile: null,
   before: null,
   csvA: null,
   csvB: null,
@@ -1885,6 +1901,12 @@ function g(id, d) {
   if (!el) return d;
   const v = parseFloat(el.value);
   return Number.isFinite(v) ? v : d;
+}
+
+// 선택한 오토튠 시나리오는 화면 입력값을 덮어쓰지 않고 미리보기로 유지한다.
+// 고급 시뮬레이션을 시작할 때만 이 값을 복사해 해당 1사이클 동안 고정한다.
+function activeProfile() {
+  return state.running && state.simProfile ? state.simProfile : (state.previewProfile || readP());
 }
 
 function oilTemperatureC() {
@@ -2185,7 +2207,7 @@ function prepareCanvas(canvas, fallbackW, fallbackH) {
 
 /* ----- Draw static graph + live marker ----- */
 function drawGraph() {
-  const p = state.previewProfile || readP();
+  const p = activeProfile();
   if (p.xMax < p.startCreep + 200) p.xMax = p.startCreep + 400;
   const logic = deriveProfileLogic(p);
   updateLogicSummary(p, logic);
@@ -2336,6 +2358,10 @@ function drawGraph() {
 
   // expert formula
   if (state.tab === "expert") {
+    const profileStatus = $("expertProfileStatus");
+    if (profileStatus) profileStatus.textContent = state.previewProfile
+      ? `선택 시나리오 ‘${state.profileSource.replace(/ · 고급 시뮬레이션 연결$/, "")}’가 고급 시뮬레이션에 연결되어 있습니다. ‘1사이클 동작’은 이 시나리오 값으로 실행합니다. 화면 입력값은 아직 바뀌지 않았습니다.`
+      : "현재 화면 입력값으로 시뮬레이션합니다. 오토튠 시나리오를 선택하면 이곳에도 즉시 연결됩니다.";
     $("expertHelp").textContent =
 `ACCEL: v = pos/${p.target} × ${p.accelSlope} + ${p.vstart}
 DECEL: v = ${p.vmax} + (pos−${p.startDecel})/(${p.startCreep}−${p.startDecel}) × ${p.decelSlope}
@@ -2424,6 +2450,9 @@ function startCycle() {
   state.raf = 0;
   if (state.timer) clearInterval(state.timer);
 
+  // 선택된 오토튠 시나리오 또는 현재 입력값을 1사이클 동안 고정한다.
+  state.simProfile = { ...(state.previewProfile || readP()) };
+
   state.running = true;
   state.paused = false;
   state.pos = 0;
@@ -2457,6 +2486,7 @@ function stopCycle(resetPos) {
   if (state.raf) cancelAnimationFrame(state.raf);
   if (state.timer) { clearInterval(state.timer); state.timer = 0; }
   state.raf = 0;
+  state.simProfile = null;
   if (resetPos) {
     state.pos = 0;
     state.v = 0;
@@ -2506,11 +2536,16 @@ function updateCycleTimeDisplay() {
   const el = $("cycleTimeKpi");
   if (!el) return;
   if (state.running) {
-    const expected = estimateCycleSeconds(readP());
+    const expected = estimateCycleSeconds(activeProfile());
     el.textContent = `진행 ${state.cycleElapsed.toFixed(2)} / 예상 ${Number.isFinite(expected) ? expected.toFixed(2) : "-"} s`;
     return;
   }
   const measuredMax = state.csvA?.metrics?.maxCycleSec;
+  if (state.previewProfile) {
+    const expected = estimateCycleSeconds(activeProfile());
+    el.textContent = Number.isFinite(expected) ? `선택 시나리오 예상 ${expected.toFixed(2)} s` : "선택 시나리오 계산 불가";
+    return;
+  }
   if (measuredMax > 0) {
     el.textContent = `CSV 실측 최대 ${measuredMax.toFixed(2)} s`;
     return;
@@ -2519,7 +2554,7 @@ function updateCycleTimeDisplay() {
     el.textContent = `시뮬 최대 ${state.simCycleMax.toFixed(2)} s · ${state.simCycleCount}회`;
     return;
   }
-  const expected = estimateCycleSeconds(readP());
+  const expected = estimateCycleSeconds(activeProfile());
   el.textContent = Number.isFinite(expected) ? `시뮬 예상 ${expected.toFixed(2)} s` : "계산 불가";
 }
 
@@ -2528,7 +2563,7 @@ function stepSim(dt, renderNow = true) {
   if (dt < 0.001) dt = 0.001;
   if (dt > 0.08) dt = 0.08;
 
-  const p = readP();
+  const p = state.simProfile || state.previewProfile || readP();
   const mul = parseFloat($("speedMul").value) || 1;
   state.cycleElapsed += dt * mul;
 
@@ -2612,10 +2647,15 @@ function updateStatus() {
 }
 
 function renderTrendCandidate(candidate) {
+  if (!state.running) state.simProfile = null;
   state.selectedCandidateId = candidate.id;
   state.rec = { ...candidate.values };
   state.previewProfile = { ...candidate.values };
-  state.profileSource = `${candidate.title} · 화면 미적용 미리보기`;
+  state.profileSource = `${candidate.title} · 고급 시뮬레이션 연결`;
+  const tuneStatus = $("mainTrendStatus");
+  if (tuneStatus) tuneStatus.textContent = state.csvA
+    ? `CSV 실측 기반 ‘${candidate.title}’ 선택 · 고급 시뮬레이션도 같은 시나리오 값으로 실행합니다.`
+    : `현재값 기반 ‘${candidate.title}’ 선택 · 고급 시뮬레이션도 같은 시나리오 값으로 실행합니다.`;
   const cur = readP();
   const fields = [
     ["START DECEL COUNTS", cur.startDecel, state.rec.startDecel],
@@ -3307,10 +3347,11 @@ function setTab(tab) {
 const floatTip = $("floatTip");
 document.querySelectorAll(".hmi-cell").forEach((cell) => {
   const key = cell.dataset.key;
+  const tipTitle = () => cell.querySelector(".lbl")?.textContent.trim() || key.replace(/_/g, " ");
   cell.addEventListener("mouseenter", (e) => {
     const t = TIPS[key]?.basic;
     if (!t) return;
-    floatTip.innerHTML = `<b>${key.replace(/_/g, " ")}</b>${t.replace(/\n/g, "<br>")}`;
+    floatTip.innerHTML = `<b>${tipTitle()}</b>${t.replace(/\n/g, "<br>")}`;
     floatTip.style.display = "block";
   });
   cell.addEventListener("mousemove", (e) => {
@@ -3328,7 +3369,7 @@ document.querySelectorAll(".hmi-cell").forEach((cell) => {
     e.stopPropagation();
     const t = TIPS[key]?.basic;
     if (!t) return;
-    floatTip.innerHTML = `<b>${key.replace(/_/g, " ")}</b>${t.replace(/\n/g, "<br>")}`;
+    floatTip.innerHTML = `<b>${tipTitle()}</b>${t.replace(/\n/g, "<br>")}`;
     floatTip.classList.add("mobile-open");
     floatTip.style.display = "block";
   });
