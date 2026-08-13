@@ -1232,7 +1232,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.5</span>
+      <span>v2.0.6</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1638,8 +1638,8 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
-      <b>v2.0.0–v2.0.5 · 2026-08-14</b>
-      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
+      <b>v2.0.0–v2.0.6 · 2026-08-14</b>
+      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 재생하고, 후보값은 구간별 실측 응답속도로 보정합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
     </article>
     <article>
       <b>v1.4.0 · 2026-08-11</b>
@@ -1836,6 +1836,10 @@ const state = {
   previewProfile: null,
   simProfile: null,
   tuningBaseProfile: null,
+  csvReferenceProfile: null,
+  measuredResponse: null,
+  simMode: "model",
+  simPlayback: null,
   before: null,
   csvA: null,
   csvB: null,
@@ -1867,6 +1871,54 @@ function g(id, d) {
 // 고급 시뮬레이션을 시작할 때만 이 값을 복사해 해당 1사이클 동안 고정한다.
 function activeProfile() {
   return state.running && state.simProfile ? state.simProfile : (state.previewProfile || readP());
+}
+
+function profilesEqual(a, b) {
+  if (!a || !b) return false;
+  const keys = ["startCreep", "startDecel", "accelSlope", "decelSlope", "vstart", "vmax", "vmin", "target", "indexPos", "indexWidth"];
+  return keys.every((key) => Math.abs(Number(a[key]) - Number(b[key])) < 1e-6);
+}
+
+function tracePhase(point) {
+  if (point?.creep > 0.5) return "CREEP";
+  if (point?.decel > 0.5) return "DECEL";
+  if (point?.full > 0.5) return "FULL";
+  if (point?.accel > 0.5) return "ACCEL";
+  return "FULL";
+}
+
+function measuredResponseFromCycle(cycle) {
+  const trace = cycle?.trace?.filter((point) => Number.isFinite(point.t) && Number.isFinite(point.pos) && Number.isFinite(point.cmd)) || [];
+  if (trace.length < 3 || !(cycle.durationSec > 0)) return null;
+  const rates = { ACCEL: [], FULL: [], DECEL: [], CREEP: [] };
+  const volts = { ACCEL: [], FULL: [], DECEL: [], CREEP: [] };
+  for (let i = 1; i < trace.length; i++) {
+    const before = trace[i - 1], after = trace[i];
+    const seconds = (after.t - before.t) / 1000;
+    const rate = (after.pos - before.pos) / seconds;
+    const phase = tracePhase(after);
+    if (seconds > 0 && seconds <= 0.25 && Number.isFinite(rate) && rate > 1) rates[phase].push(rate);
+    if (Math.abs(after.cmd) > 0.05) volts[phase].push(Math.abs(after.cmd));
+  }
+  const fallbackRate = median(Object.values(rates).flat()) || 1;
+  const fallbackVolt = median(Object.values(volts).flat()) || 1;
+  return {
+    trace,
+    durationSec: cycle.durationSec,
+    rates: Object.fromEntries(Object.keys(rates).map((phase) => [phase, median(rates[phase]) || fallbackRate])),
+    volts: Object.fromEntries(Object.keys(volts).map((phase) => [phase, median(volts[phase]) || fallbackVolt])),
+  };
+}
+
+function simulationModeFor(profile) {
+  if (!state.measuredResponse) return "model";
+  return profilesEqual(profile, state.csvReferenceProfile) ? "measured" : "measured-adjusted";
+}
+
+function simulationModeLabel(mode = state.simMode) {
+  if (mode === "measured") return "CSV 대표 1사이클 실측 재현";
+  if (mode === "measured-adjusted") return "CSV 구간 응답 보정 후보";
+  return "계산 모델";
 }
 
 function oilTemperatureC() {
@@ -2319,9 +2371,18 @@ function drawGraph() {
   // expert formula
   if (state.tab === "expert") {
     const profileStatus = $("expertProfileStatus");
-    if (profileStatus) profileStatus.textContent = state.selectedCandidateId && state.rec
-      ? `선택 시나리오 ‘${state.profileSource.replace(/ · 화면값 반영$/, "")}’가 현재 화면값에 반영되었습니다. ‘1사이클 동작’은 이 값으로 실행합니다.`
-      : "현재 화면 입력값으로 시뮬레이션합니다. 오토튠 시나리오를 선택하면 이곳에도 즉시 연결됩니다.";
+    if (profileStatus) {
+      const mode = simulationModeFor(p);
+      const source = state.selectedCandidateId && state.rec
+        ? `선택 시나리오 ‘${state.profileSource.replace(/ · 화면값 반영$/, "")}’가 현재 화면값에 반영되었습니다.`
+        : "현재 화면 입력값을 사용합니다.";
+      const detail = mode === "measured"
+        ? "CSV 대표 1사이클의 실제 시간·위치·구간을 그대로 재생합니다."
+        : mode === "measured-adjusted"
+          ? "CSV의 구간별 실제 응답속도를 기준으로 후보값의 가속·감속 시간을 보정합니다."
+          : "CSV가 없어 계산 모델로 재생합니다.";
+      profileStatus.textContent = `${source} ${detail}`;
+    }
     $("expertHelp").textContent =
 `ACCEL: v = pos/${p.target} × ${p.accelSlope} + ${p.vstart}
 DECEL: v = ${p.vmax} + (pos−${p.startDecel})/(${p.startCreep}−${p.startDecel}) × ${p.decelSlope}
@@ -2412,6 +2473,8 @@ function startCycle() {
 
   // 선택된 오토튠 시나리오 또는 현재 입력값을 1사이클 동안 고정한다.
   state.simProfile = { ...(state.previewProfile || readP()) };
+  state.simMode = simulationModeFor(state.simProfile);
+  state.simPlayback = state.simMode === "measured" ? { trace: state.measuredResponse.trace, index: 0, durationSec: state.measuredResponse.durationSec } : null;
 
   state.running = true;
   state.paused = false;
@@ -2447,6 +2510,8 @@ function stopCycle(resetPos) {
   if (state.timer) { clearInterval(state.timer); state.timer = 0; }
   state.raf = 0;
   state.simProfile = null;
+  state.simPlayback = null;
+  state.simMode = "model";
   if (resetPos) {
     state.pos = 0;
     state.v = 0;
@@ -2460,8 +2525,14 @@ function stopCycle(resetPos) {
   drawGraph();
 }
 
-/** 지령 전압(V) → 엔코더 증가량(counts/s). CSM 위치식에 맞춰 곡선을 진행함 */
-function encoderRate(p, cmdV) {
+/** 지령 전압(V) → 엔코더 증가량(counts/s). CSV가 있으면 구간별 실측 응답을 우선 사용한다. */
+function encoderRate(p, cmdV, phase = "FULL", response = state.measuredResponse) {
+  if (response && (state.simMode === "measured-adjusted" || !state.running)) {
+    const measuredRate = response.rates[phase] || response.rates.FULL;
+    const measuredVolt = Math.max(response.volts[phase] || response.volts.FULL, 0.1);
+    // 후보값의 전압 변화만 실측 구간 속도에 비례 보정한다. 과도한 외삽은 제한한다.
+    return measuredRate * Math.max(0.25, Math.min(1.8, Math.abs(cmdV) / measuredVolt));
+  }
   const span = Math.max(p.startCreep, p.indexPos, p.target, p.xMax, 1000);
   // 1× 배속에서 대략 span 을 3~4초에 통과
   const countsPerSecAtVmax = span / 3.2;
@@ -2470,6 +2541,8 @@ function encoderRate(p, cmdV) {
 }
 
 function estimateCycleSeconds(p) {
+  const mode = simulationModeFor(p);
+  if (mode === "measured") return state.measuredResponse.durationSec;
   let pos = 0;
   let elapsed = 0;
   const dt = 1 / 120;
@@ -2486,7 +2559,7 @@ function estimateCycleSeconds(p) {
       pos >= p.indexPos + Math.max(p.indexWidth, 1) * 0.5;
     if (finished && pos >= Math.min(p.startDecel, p.indexPos) * 0.5) return elapsed;
     const stopPos = deriveProfileLogic(p).stopPos;
-    pos = Math.min(pos + encoderRate(p, cmdV) * dt, stopPos);
+    pos = Math.min(pos + encoderRate(p, cmdV, phase) * dt, stopPos);
     elapsed += dt;
   }
   return NaN;
@@ -2497,13 +2570,13 @@ function updateCycleTimeDisplay() {
   if (!el) return;
   if (state.running) {
     const expected = estimateCycleSeconds(activeProfile());
-    el.textContent = `진행 ${state.cycleElapsed.toFixed(2)} / 예상 ${Number.isFinite(expected) ? expected.toFixed(2) : "-"} s`;
+    el.textContent = `${simulationModeLabel()} · 진행 ${state.cycleElapsed.toFixed(2)} / 예상 ${Number.isFinite(expected) ? expected.toFixed(2) : "-"} s`;
     return;
   }
   const measuredMax = state.csvA?.metrics?.maxCycleSec;
-  if (state.previewProfile) {
+  if (state.selectedCandidateId && state.rec) {
     const expected = estimateCycleSeconds(activeProfile());
-    el.textContent = Number.isFinite(expected) ? `선택 시나리오 예상 ${expected.toFixed(2)} s` : "선택 시나리오 계산 불가";
+    el.textContent = Number.isFinite(expected) ? `${simulationModeLabel(simulationModeFor(activeProfile()))} · 예상 ${expected.toFixed(2)} s` : "선택 시나리오 계산 불가";
     return;
   }
   if (measuredMax > 0) {
@@ -2526,6 +2599,29 @@ function stepSim(dt, renderNow = true) {
   const p = state.simProfile || state.previewProfile || readP();
   const mul = parseFloat($("speedMul").value) || 1;
   state.cycleElapsed += dt * mul;
+
+  if (state.simMode === "measured" && state.simPlayback) {
+    const playback = state.simPlayback;
+    const trace = playback.trace;
+    const targetT = trace[0].t + Math.min(state.cycleElapsed, playback.durationSec) * 1000;
+    while (playback.index < trace.length - 2 && trace[playback.index + 1].t < targetT) playback.index++;
+    const a = trace[playback.index], b = trace[Math.min(playback.index + 1, trace.length - 1)];
+    const ratio = b.t > a.t ? Math.max(0, Math.min(1, (targetT - a.t) / (b.t - a.t))) : 0;
+    state.pos = a.pos + (b.pos - a.pos) * ratio;
+    state.v = Math.abs(a.cmd + (b.cmd - a.cmd) * ratio);
+    state.phase = tracePhase(ratio < 0.5 ? a : b);
+    state.trail.push({ pos: state.pos, v: state.v, phase: state.phase });
+    if (state.trail.length > 2500) state.trail.shift();
+    if (state.cycleElapsed >= playback.durationSec) {
+      state.v = 0;
+      state.phase = "DONE";
+      state.simCycleMax = Math.max(state.simCycleMax, playback.durationSec);
+      state.simCycleCount += 1;
+      stopCycle(false);
+    }
+    if (renderNow) { updateStatus(); drawGraph(); }
+    return;
+  }
 
   // 현재 엔코더 위치에서의 CSM 지령 (HMI 파라미터 식)
   const e = evalAt(state.pos, p);
@@ -2564,7 +2660,7 @@ function stepSim(dt, renderNow = true) {
   }
 
   // ★ 핵심: 엔코더(ic_conveyor_position) 자동 증가
-  const dCounts = encoderRate(p, cmdV) * dt * mul;
+  const dCounts = encoderRate(p, cmdV, phase) * dt * mul;
   const stopPos = deriveProfileLogic(p).stopPos;
   state.pos = Math.min(state.pos + dCounts, stopPos);
   state.v = cmdV;
@@ -3079,7 +3175,7 @@ async function parseStudioTrendCsv(text, fileName, setType, onProgress) {
 
     if (setType === "A") {
       if (activeCycle && activeCycle.trace.length < 2000 && Number.isFinite(pos) && Number.isFinite(cmd)) {
-        activeCycle.trace.push({ pos, cmd, index: values.index, accel: values.accel, full: values.full, decel: values.decel, creep: values.creep });
+        activeCycle.trace.push({ t, pos, cmd, index: values.index, accel: values.accel, full: values.full, decel: values.decel, creep: values.creep });
       }
       if (moving && activeCycle) activeCycle.peakCmd = Math.max(activeCycle.peakCmd, Math.abs(cmd || 0));
       if (moving && Number.isFinite(pos)) {
@@ -3573,8 +3669,12 @@ async function handleCsvFile(file, setType) {
         .filter((entry) => entry.cycle.trace?.length > 1)
         .sort((a, b) => a.delta - b.delta)[0];
       state.selectedTrendCycle = representative ? representative.index : -1;
+      state.csvReferenceProfile = { ...readP() };
+      state.measuredResponse = measuredResponseFromCycle(representative?.cycle);
       const mainStatus = $("mainTrendStatus");
-      if (mainStatus) mainStatus.textContent = `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 이제 ‘오토튠 시나리오 만들기’를 누르십시오.`;
+      if (mainStatus) mainStatus.textContent = state.measuredResponse
+        ? `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 고급 탭에서 대표 실측 1사이클을 재생할 수 있습니다.`
+        : `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 대표 실측 재생에 필요한 연속 데이터가 부족합니다.`;
     }
     state.rec = null;
     state.previewProfile = null;
@@ -3593,6 +3693,8 @@ async function handleCsvFile(file, setType) {
     if (setType === "A") $("csvChartWrap").classList.remove("show");
     if (setType === "A") {
       document.body.classList.remove("has-csv");
+      state.csvReferenceProfile = null;
+      state.measuredResponse = null;
       const mainStatus = $("mainTrendStatus");
       if (mainStatus) mainStatus.textContent = "CSV를 읽지 못했습니다. 현재 파라미터 기반 시나리오는 계속 만들 수 있습니다.";
     }
