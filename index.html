@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="SC2 Profiler" />
-<title>SC2 CONVEYOR PROFILING Simulator</title>
+<title>SC2 Parameter Auto Tune</title>
 <style>
   :root {
     --bg: #0b1015;
@@ -133,6 +133,8 @@
     grid-template-columns: minmax(0, 1fr) minmax(370px, 430px);
     min-height: 0;
   }
+  body.mode-basic:not(.has-csv) .workspace { grid-template-columns: 1fr; }
+  body.mode-basic:not(.has-csv) .stage { display: none; }
   @media (max-width: 900px) {
     .workspace {
       grid-template-columns: 1fr;
@@ -404,6 +406,19 @@
     flex-direction: column;
     gap: 8px;
   }
+  .autotune-start {
+    border: 1px solid #35566a;
+    background: linear-gradient(135deg, #12242e, #101920);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .autotune-start h2 { margin: 0; color: var(--cyan); font-size: 1.05rem; }
+  .autotune-start p { margin: 5px 0 10px; color: var(--muted); font-size: .84rem; line-height: 1.45; }
+  .autotune-paths { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .autotune-paths button { border: 1px solid #3c6d7c; background: #18313b; color: var(--text); border-radius: 8px; padding: 10px; font: inherit; font-size: .82rem; font-weight: 800; text-align: left; }
+  .autotune-paths button.secondary { border-color: #59636a; background: #1b252b; }
+  .autotune-paths small { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; line-height: 1.35; }
+  .tune-status { margin-top: 9px; color: #9fd7e9; font-size: .78rem; line-height: 1.4; }
   .hmi-screen {
     background: var(--hmi-panel);
     border: 1px solid var(--hmi-border);
@@ -656,6 +671,7 @@
   .candidate-choice.on { border-color: var(--cyan); background: #123039; }
   .candidate-choice b { display: block; color: #7fdbff; font-size: 0.8rem; }
   .candidate-choice small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.72rem; line-height: 1.35; }
+  .candidate-choice em { display: block; margin-top: 4px; color: var(--green); font-style: normal; font-size: .75rem; }
 
   /* Expert extras under HMI */
   .expert-extra {
@@ -889,6 +905,7 @@
     max-width: 900px;
     margin-bottom: 14px;
   }
+  .collect-view .upload-panel, .collect-view .analysis-panel, .collect-view .csv-chart-wrap { display: none !important; }
   .collect-view table {
     width: 100%;
     max-width: 980px;
@@ -1114,6 +1131,7 @@
     }
     .phase-strip span { font-size: 0.74rem; }
     .hmi-wrap { padding: 10px; }
+    .autotune-paths { grid-template-columns: 1fr; }
     .hmi-screen { padding: 12px 9px; }
     .hmi-title { font-size: 1.02rem; margin-bottom: 12px; }
     .mobile-hmi-help {
@@ -1202,18 +1220,18 @@
 
 <div class="app-bar">
   <div class="brand-block">
-    <h1>SC2 · CONVEYOR PROFILING</h1>
-    <span class="sub">조업자용 프로파일 확인 · CSM 지령과 실측 응답 분리</span>
+    <h1>SC2 · PARAMETER AUTO TUNE</h1>
+    <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v1.4.0</span>
+      <span>v2.0.0</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
   </div>
   <div class="tabs" role="tablist">
-    <button type="button" class="on" data-tab="basic" id="tabBasic">기본 모드</button>
-    <button type="button" class="expert" data-tab="expert" id="tabExpert">고급 모드</button>
-    <button type="button" class="collect" data-tab="collect" id="tabCollect">CSV 첨부</button>
+    <button type="button" class="on" data-tab="basic" id="tabBasic">자동 튜닝</button>
+    <button type="button" class="expert" data-tab="expert" id="tabExpert">고급 시뮬레이션</button>
+    <button type="button" class="collect" data-tab="collect" id="tabCollect">도움말</button>
   </div>
 </div>
 
@@ -1251,8 +1269,8 @@
           <strong class="warn" id="riskKpi">CSV 입력 대기</strong>
         </div>
         <div class="operator-kpi">
-          <span>확인된 sheet 중량</span>
-          <strong>120~150 kg · 평지</strong>
+          <span>선택 시나리오 예상</span>
+          <strong id="candidateCycleKpi">시나리오 선택 대기</strong>
         </div>
         <div class="operator-kpi">
           <span>1사이클 최대시간 (초)</span>
@@ -1270,7 +1288,7 @@
       <div class="logic-warning" id="logicWarning"></div>
       <div class="creep-guide" aria-label="START CREEP 기준값과 실제 CREEP 진입의 차이">
         <div class="creep-guide-head">
-          <span>우측 현재 CONVEYOR PROFILING 값으로 즉시 재계산</span>
+          <span>현재 파라미터로 즉시 재계산</span>
           <span class="creep-source" id="creepValueSource">캡처값 기준</span>
         </div>
         <div class="creep-guide-item">
@@ -1293,13 +1311,10 @@
       <div class="graph-box">
         <canvas id="graphCv"></canvas>
         <div class="graph-legend" aria-label="그래프 범례">
-          <span class="legend-item"><i class="legend-line blue"></i>CSM 계산 지령</span>
+          <span class="legend-item"><i class="legend-line blue"></i>선택 파라미터 출력전압</span>
           <span class="legend-item"><i class="legend-line green"></i>1사이클 실행 궤적</span>
           <span class="legend-item"><i class="legend-line yellow"></i>CSV 대표 1사이클 실측</span>
-          <label class="cross-toggle" title="그래프 위 마우스 위치의 계산 좌표를 표시합니다">
-            <input type="checkbox" id="showCrosshair" checked>
-            십자선 좌표
-          </label>
+          <span class="legend-item">십자선: 위치·출력전압·구간</span>
         </div>
         <div class="graph-cross-v" id="graphCrossV"></div>
         <div class="graph-cross-h" id="graphCrossH"></div>
@@ -1311,8 +1326,17 @@
 
     <!-- RIGHT: HMI clone -->
     <aside class="hmi-wrap">
+      <section class="autotune-start" aria-label="자동 튜닝 시작">
+        <h2>어떻게 시작할까요?</h2>
+        <p>① PLC Trend CSV를 올리면 실제 운전값을 반영합니다. ② 파일이 없으면 아래 현재 파라미터와 증상으로 화면 시험 시나리오를 만듭니다.</p>
+        <div class="autotune-paths">
+          <button type="button" id="btnMainUpload">① PLC Trend CSV 업로드<small>10 ms Trend A 한 파일로 실제 사이클·INDEX 이동을 분석</small></button>
+          <button type="button" class="secondary" id="btnDirectTune">② 현재값으로 오토튠<small>빈 칸은 수정 적용본 기본값으로 보완</small></button>
+        </div>
+        <div class="tune-status" id="mainTrendStatus">CSV 미입력 · 현재 파라미터 기반 시나리오를 만들 수 있습니다.</div>
+      </section>
       <div class="hmi-screen" id="hmiScreen">
-        <div class="hmi-title">CONVEYOR PROFILING</div>
+        <div class="hmi-title">SC2 CURRENT PARAMETERS</div>
         <div class="mobile-hmi-help">파라미터 이름을 누르면 설명이 표시됩니다.</div>
 
         <!-- Actual HMI photo order: two equal columns, five visual rows. -->
@@ -1359,8 +1383,8 @@
 
       <div class="side-actions">
         <button type="button" class="btn" id="btnCapture">기본값</button>
-        <button type="button" class="btn tune" id="btnTune">추천 후보 계산</button>
-        <button type="button" class="btn apply" id="btnApplyRec" disabled>화면 시험값 적용</button>
+        <button type="button" class="btn tune" id="btnTune">오토튠 시나리오 만들기</button>
+        <button type="button" class="btn apply" id="btnApplyRec" disabled>선택값 화면 적용</button>
       </div>
 
       <div class="linked-tune" id="linkedTuneBox">
@@ -1371,10 +1395,10 @@
 
       <div class="mini-problems">
         <div class="problem-title-row">
-          <div class="t">무엇이 불편한가요? · 중복 선택</div>
+          <div class="t">현재 증상 선택 · 복수 선택 가능</div>
           <button type="button" class="help-link" id="btnHelp">왜 선택하나요?</button>
         </div>
-        <div class="problem-group-label">조업자가 바로 느끼는 증상</div>
+        <div class="problem-group-label">해당되는 현상을 모두 선택하세요</div>
         <div class="chips" id="probChips">
           <button type="button" class="chip" data-p="sheetSurge">자동 정지 때 sheet가 앞으로 쏠림</button>
           <button type="button" class="chip" data-p="hard">자동 정지 순간 충격</button>
@@ -1385,7 +1409,7 @@
           <button type="button" class="chip" data-p="slow">자동 1사이클이 평소보다 느림</button>
           <button type="button" class="chip" data-p="home">Homing 때 INDEX 센서를 지나침</button>
           <div class="advanced-problems">
-            <div class="problem-group-label">고급 진단 증상</div>
+            <div class="problem-group-label">추가 확인 증상</div>
             <div class="chips">
               <button type="button" class="chip" data-p="stopDrift">지령 0 후 엔코더가 계속 증가</button>
               <button type="button" class="chip" data-p="cycleVariation">같은 조건인데 정지 count가 매번 다름</button>
@@ -1428,13 +1452,9 @@
 
 <!-- ========== COLLECT ========== -->
 <div class="view collect-view" id="viewCollect">
-  <h2>CSV 첨부 · Studio 5000 Trend</h2>
+  <h2>도움말 · PLC Trend 수집 및 자동 튜닝 사용법</h2>
   <p class="lead">
-    HMI CONVEYOR PROFILING 계산에 따라 <b>움직이는</b> 데이터입니다.
-    <b>CSM 프로그램 분석</b> · Program: <code>Sheet_Conveyor_2</code>.
-    기본 수집은 <b>10 ms · 정상 자동운전 5분</b>, 증상이 드물면 최대 30분입니다. 한 Trend는 최대 8 pen이므로
-    <b>Trend A 8개</b>와 <b>Trend B 7개</b>를 별도 CSV로 수집합니다. 두 파일은 이 PC의 브라우저 메모리에서만 처리되며 인터넷이나 외부 서버를 사용하지 않습니다.
-    현재 SC2 트렌드는 없으며 CSV 행 구조만 기존 CSM Trend 파일을 참고했습니다.
+    <b>1.</b> 정상 자동운전에서 <b>10 ms · 5분</b> 동안 Trend A를 캡처합니다. <b>2.</b> 자동 튜닝 화면의 ‘PLC Trend CSV 업로드’를 누릅니다. <b>3.</b> 세 시나리오 중 하나를 골라 화면값으로만 먼저 적용합니다. <b>4.</b> 현장 적용 후 새 Trend와 증상을 다시 넣어 한 단계씩 조정합니다. CSV는 이 브라우저 안에서만 처리되며 외부로 전송되지 않습니다.
   </p>
 
   <div class="meaning-grid" aria-label="분석 결과 의미">
@@ -1447,15 +1467,12 @@
   <section class="collect-procedure" aria-labelledby="collectProcedureTitle">
     <h3 id="collectProcedureTitle">SC2 현장 Trend 수집 절차</h3>
     <ol>
-      <li><b>수집 전 기록:</b> HMI 파라미터 9개가 보이게 사진을 찍고 오일 상태(냉간/정상/고온), sheet 중량 범위, 증상을 메모합니다.</li>
-      <li><b>설정:</b> Trend A는 8 pen, Trend B는 7 pen으로 따로 만들고 두 Trend 모두 <b>Sample Period 10 ms</b>로 설정합니다.</li>
-      <li><b>기본 수집:</b> 정상 자동운전에서 A와 B를 가능한 한 같은 시각에 시작해 <b>5분간</b> 기록합니다. 수집 중 파라미터를 변경하지 않습니다.</li>
-      <li><b>종료:</b> A와 B를 같은 시각에 종료하고 <code>SC2_A_날짜_시간.csv</code>, <code>SC2_B_날짜_시간.csv</code>처럼 구분해 저장합니다.</li>
-      <li><b>증상이 드문 경우:</b> 5분 안에 증상이 없으면 조건을 바꾸지 않고 <b>최대 30분</b>까지 연장 수집합니다. 분석기는 전체 10 ms 샘플을 사이클별로 자동 분리합니다.</li>
-      <li><b>호밍 확인:</b> 자동운전 기록과 별도로 B를 먼저 시작하고 Homing 1회를 수행한 뒤 약 1분 이내에 종료합니다. 파일명에 <code>HOMING</code>을 넣습니다.</li>
-      <li><b>로컬 입력:</b> 이 화면의 Trend A 선택칸과 Trend B 선택칸에 각각 넣습니다. 두 파일의 날짜·시간이 겹쳐야 같은 운전의 종합분석이 가능합니다.</li>
+      <li><b>설정:</b> Trend A는 최대 8 pen, <b>Sample Period 10 ms</b>로 설정합니다.</li>
+      <li><b>수집:</b> 정상 자동운전에서 <b>5분간</b> 기록합니다. 수집 중에는 파라미터를 바꾸지 않습니다.</li>
+      <li><b>증상이 드문 경우:</b> 조건을 바꾸지 않고 최대 <b>30분</b>까지 연장합니다. 분석기는 전체 샘플을 사이클별로 정리합니다.</li>
+      <li><b>적용 순서:</b> 자동 튜닝 화면에서 CSV를 올리고, 한 시나리오만 적용한 뒤 같은 조건으로 새 Trend를 다시 캡처합니다.</li>
     </ol>
-    <div class="rule"><b>중요:</b> 5분과 30분 파일을 섞어 평균내지 않습니다. 오일 온도·sheet 조건·파라미터가 달라지면 새 파일로 분리합니다. CSV는 브라우저 메모리에서만 읽고 외부로 보내지 않습니다.</div>
+    <div class="rule"><b>중요:</b> 서로 다른 파라미터·조건의 CSV를 평균내지 않습니다. 한 번에 한 시나리오만 현장 적용하고 전후 Trend를 비교합니다.</div>
   </section>
 
   <div class="upload-panel">
@@ -1609,6 +1626,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v2.0.0 · 2026-08-14</b>
+      <p>페이지 목적을 SC2 파라미터 오토튜닝으로 재정의했습니다. 메인에서 PLC Trend CSV 업로드 또는 현재값 입력으로 시작하고, 사이클 단축·균형·INDEX 통과 감소의 3개 시나리오와 예상 사이클 시간을 제공합니다. 고급 탭에서만 이론 시뮬레이션을 실행합니다.</p>
+    </article>
     <article>
       <b>v1.4.0 · 2026-08-11</b>
       <p>모바일은 CSV 입력 전 설정·증상·추천만 표시하고, CSV 입력 뒤에만 대표 실측 그래프를 표시하도록 단순화했습니다. PC 기본 화면은 수동 시뮬레이터를 숨기고 CREEP 상세식을 한 줄 요약으로 축소했으며, 증상 목록을 통합하고 오일 온도 입력을 제거했습니다.</p>
@@ -2290,7 +2311,7 @@ function drawGraph() {
 
   ctx.fillStyle = "#8b9fb5";
   ctx.font = "14px sans-serif";
-  ctx.fillText("CSM 지령 V  vs  위치 counts", pad.l, 18);
+  ctx.fillText("가로축: 엔코더 위치 counts · 세로축: 프로포셔널 밸브 출력전압 V", pad.l, 18);
 
   // phase strip
   const counts = { ACCEL: 0, FULL: 0, DECEL: 0, CREEP: 0, STOP: 0 };
@@ -2594,7 +2615,7 @@ function renderTrendCandidate(candidate) {
     ["INDEX SPEED MIN", cur.vmin, state.rec.vmin],
   ];
   $("candidateChoices").innerHTML = state.candidates.map((item) =>
-    `<button type="button" class="candidate-choice ${item.id === candidate.id ? "on" : ""}" data-candidate-id="${item.id}"><b>${esc(item.title)}</b><small>${esc(item.characteristic)}</small></button>`
+    `<button type="button" class="candidate-choice ${item.id === candidate.id ? "on" : ""}" data-candidate-id="${item.id}"><b>${esc(item.title)}</b><small>${esc(item.characteristic)}</small><em>${esc(item.cycleEstimate || "예상 사이클 시간 계산 불가")}</em></button>`
   ).join("");
   document.querySelectorAll(".candidate-choice").forEach((button) => {
     button.onclick = () => {
@@ -2606,7 +2627,9 @@ function renderTrendCandidate(candidate) {
     const changed = Math.abs(before - after) > 1e-9;
     return `<tr><td>${name}</td><td style="color:#889">${round(before)}</td><td style="color:${changed ? "#7fdbff" : "#77838c"}">${round(after)}${changed ? " ◀" : " · 유지"}</td></tr>`;
   }).join("");
-  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br>한 번에 이 후보의 변경 항목만 화면에 적용해 5분 Trend로 비교하십시오. PLC 자동 적용은 하지 않습니다.`;
+  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>예상 사이클 시간:</b> ${esc(candidate.cycleEstimate || "계산 불가")}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br>한 번에 이 후보의 변경 항목만 화면에 적용해 5분 Trend로 비교하십시오. PLC 자동 적용은 하지 않습니다.`;
+  const candidateKpi = $("candidateCycleKpi");
+  if (candidateKpi) candidateKpi.textContent = candidate.cycleEstimate || "계산 불가";
   $("btnApplyRec").disabled = false;
   $("recBox").classList.add("show");
 }
@@ -2618,13 +2641,12 @@ function recommendFromTrend(cur, metric) {
   const evidence = `${metric.cycleCount}사이클 · 중앙 ${metric.medianCycleSec.toFixed(2)} s · CREEP→INDEX OFF ${creep} counts · INDEX OFF 후 ${indexMove} counts`;
   const shiftFast = Math.max(50, Math.min(100, Math.round(span * 0.12)));
   const shiftBalance = Math.max(30, Math.min(60, Math.round(span * 0.07)));
+  const time = (values) => `모델 ${estimateCycleSeconds(values).toFixed(2)} s · Trend 중앙 ${metric.medianCycleSec.toFixed(2)} s`;
   const candidates = [
-    { id: "cycle", title: "① 사이클 단축 · 저속 접근 유지", values: { ...cur, startCreep: cur.startCreep + shiftFast }, evidence, characteristic: `START CREEP +${shiftFast}: CREEP 진입을 뒤로 옮겨 저속 이동거리를 줄입니다. INDEX SPEED MIN ${round(cur.vmin)} V는 유지합니다.`, guard: "INDEX OFF 후 추가 이동의 중앙·최대값이 현재보다 커지면 폐기" },
-    { id: "balance", title: "② 균형 · 작은 폭 사이클 단축", values: { ...cur, startCreep: cur.startCreep + shiftBalance }, evidence, characteristic: `START CREEP +${shiftBalance}: ①보다 작은 한 단계 시험입니다. INDEX 직전 CREEP 전압은 유지합니다.`, guard: "사이클 중앙시간이 줄고 INDEX OFF 후 이동이 증가하지 않을 때만 다음 단계" },
-    { id: "gentle", title: "③ 완만 감속 · CREEP 구간 일부 단축", values: { ...cur, decelSlope: round(cur.decelSlope * 0.95) }, evidence, characteristic: `DECEL SLOPE ${round(cur.decelSlope)} → ${round(cur.decelSlope * 0.95)}: 감속선을 완만하게 하되 최종 MIN은 유지합니다.`, guard: "DECEL 전환 충격·INDEX OFF 후 이동·사이클 시간을 함께 비교" },
-    { id: "index-min", title: "④ INDEX 통과 감소 · 최종 저속 낮춤", values: { ...cur, vmin: round(Math.max(0.1, cur.vmin - 0.03)) }, evidence, characteristic: `INDEX SPEED MIN ${round(cur.vmin)} → ${round(Math.max(0.1, cur.vmin - 0.03))} V: INDEX 직전 지령을 낮춰 추가 이동 감소를 확인합니다. 사이클 시간은 늘 수 있습니다.`, guard: "저속 실속·INDEX 미도달이 없고 INDEX OFF 후 이동이 감소할 때만 유지" },
-    { id: "index-decel", title: "⑤ INDEX 통과 감소 · 감속 조기 시작", values: { ...cur, startDecel: Math.max(200, cur.startDecel - Math.max(30, Math.round(span * 0.06))) }, evidence, characteristic: `START DECEL을 ${Math.max(30, Math.round(span * 0.06))} counts 앞당겨 INDEX 접근 지령을 낮춥니다. 사이클 시간은 늘 수 있습니다.`, guard: "sheet 쏠림·정지 충격이 줄고 INDEX OFF 후 이동이 감소할 때만 유지" },
-  ];
+    { id: "cycle", title: "① 사이클 단축 우선", values: { ...cur, startCreep: cur.startCreep + shiftFast }, evidence, characteristic: `START CREEP +${shiftFast}: CREEP 진입을 뒤로 옮겨 저속 이동거리를 줄입니다. INDEX SPEED MIN ${round(cur.vmin)} V는 유지합니다.`, guard: "INDEX OFF 후 추가 이동의 중앙·최대값이 현재보다 커지면 폐기" },
+    { id: "balance", title: "② 균형 우선", values: { ...cur, startCreep: cur.startCreep + shiftBalance }, evidence, characteristic: `START CREEP +${shiftBalance}: 작은 폭으로 사이클 시간을 줄이고 INDEX 직전 CREEP 전압은 유지합니다.`, guard: "사이클 중앙시간이 줄고 INDEX OFF 후 이동이 증가하지 않을 때만 다음 단계" },
+    { id: "index", title: "③ INDEX 통과 감소 우선", values: { ...cur, vmin: round(Math.max(0.1, cur.vmin - 0.03)) }, evidence, characteristic: `INDEX SPEED MIN ${round(cur.vmin)} → ${round(Math.max(0.1, cur.vmin - 0.03))} V: INDEX 직전 지령을 낮춰 추가 이동 감소를 확인합니다.`, guard: "저속 실속·INDEX 미도달이 없고 INDEX OFF 후 이동이 감소할 때만 유지" },
+  ].map((candidate) => ({ ...candidate, cycleEstimate: time(candidate.values) }));
   state.candidates = candidates;
   renderTrendCandidate(candidates[0]);
 }
@@ -2633,7 +2655,6 @@ function recommendFromTrend(cur, metric) {
 function recommend() {
   const cur = readP();
   const probs = state.problems;
-  const temp = state.temp;
   const aMetric = state.csvA?.metrics || null;
   const bMetric = state.csvB?.metrics || null;
   const currentLogic = deriveProfileLogic(cur);
@@ -2652,7 +2673,6 @@ function recommend() {
   const cycleTimeGoal = probs.has("slow");
   const indexPassGoal = probs.has("late") || probs.has("stopDrift");
 
-  why.push(temperatureRecommendationReason());
   if (probs.has("sheetSurge")) {
     decelShift -= Math.max(40, Math.round(span * 0.08));
     why.push("sheet 쏠림: 첫 시험은 MAX와 SLOPE를 유지하고 START DECEL만 한 단계 앞당김");
@@ -2712,13 +2732,6 @@ function recommend() {
   } else {
     why.push("Trend A 미입력: 현재 운전값을 기준으로 한 작은 화면 시험 후보이며 실제 가동응답 기반 값은 아님");
   }
-  if (bMetric) {
-    const parts = [];
-    if (Number.isFinite(bMetric.startDelaySec)) parts.push(`출발허가→운전 ${bMetric.startDelaySec.toFixed(3)} s`);
-    if (Number.isFinite(bMetric.stopConfirmSec)) parts.push(`운전종료→정지확인 ${bMetric.stopConfirmSec.toFixed(3)} s`);
-    if (Number.isFinite(bMetric.homingSec)) parts.push(`호밍 ${bMetric.homingSec.toFixed(3)} s`);
-    why.push(`Trend B 상태 타이밍: ${parts.length ? parts.join(" · ") : "완성된 전환쌍 없음"}`);
-  }
   if (!probs.size) why.push("선택 증상 없음: 장기간 사용 중인 현재값을 그대로 유지. 자동으로 공식을 예쁘게 맞추지 않음");
 
   const maxShift = Math.max(60, Math.min(150, Math.round(span * 0.20)));
@@ -2757,6 +2770,22 @@ function recommend() {
   $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${indexRule}${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 이 화면은 파라미터 후보를 만들지 않습니다." : ""}`;
   $("recBox").classList.add("show");
   $("btnApplyRec").disabled = !hasChanges || recommendedLogic.warnings.length > 0;
+}
+
+function recommendFromInputs() {
+  const cur = readP();
+  const span = Math.max(100, cur.startCreep - cur.startDecel);
+  const fast = Math.max(50, Math.min(100, Math.round(span * 0.12)));
+  const balanced = Math.max(25, Math.min(55, Math.round(span * 0.06)));
+  const baseline = estimateCycleSeconds(cur);
+  const estimate = (values) => `모델 ${estimateCycleSeconds(values).toFixed(2)} s · 현재 모델 ${baseline.toFixed(2)} s`;
+  const evidence = "PLC Trend 미입력 · 현재 입력값과 SC2 감속식 기준";
+  state.candidates = [
+    { id: "cycle", title: "① 사이클 단축 우선", values: { ...cur, startCreep: cur.startCreep + fast }, evidence, characteristic: `START CREEP +${fast}: CREEP 이동을 줄이는 화면 시험안입니다.`, guard: "현장 적용 뒤 INDEX OFF 후 이동이 증가하면 즉시 기본값으로 복원", },
+    { id: "balance", title: "② 균형 우선", values: { ...cur, startCreep: cur.startCreep + balanced }, evidence, characteristic: `START CREEP +${balanced}: 가장 작은 변경폭으로 먼저 반응을 확인합니다.`, guard: "사이클 시간·INDEX OFF 후 이동을 같은 조건에서 비교", },
+    { id: "index", title: "③ INDEX 통과 감소 우선", values: { ...cur, vmin: round(Math.max(0.1, cur.vmin - 0.03)) }, evidence, characteristic: `INDEX SPEED MIN −0.03 V: INDEX 직전 저속 지령을 낮춘 보수적 시험안입니다.`, guard: "INDEX 센서 도달 실패 또는 저속 실속이 있으면 즉시 기본값으로 복원", },
+  ].map((candidate) => ({ ...candidate, cycleEstimate: estimate(candidate.values) }));
+  renderTrendCandidate(state.candidates[0]);
 }
 
 /* ----- Encoder-only CSV status: no physical or hydraulic inference ----- */
@@ -3309,10 +3338,6 @@ function hideGraphCrosshair() {
 }
 
 function updateGraphCrosshair(e) {
-  if (!$("showCrosshair").checked) {
-    hideGraphCrosshair();
-    return;
-  }
   const plot = $("graphCv")._plot;
   if (!plot) return;
   const rect = $("graphCv").getBoundingClientRect();
@@ -3361,9 +3386,6 @@ function updateGraphCrosshair(e) {
 $("graphCv").addEventListener("pointermove", updateGraphCrosshair);
 $("graphCv").addEventListener("pointerdown", updateGraphCrosshair);
 $("graphCv").addEventListener("pointerleave", hideGraphCrosshair);
-$("showCrosshair").addEventListener("change", () => {
-  if (!$("showCrosshair").checked) hideGraphCrosshair();
-});
 
 /* Wire controls */
 $("tabBasic").onclick = () => setTab("basic");
@@ -3429,7 +3451,33 @@ $("btnCapture").onclick = () => {
   drawGraph();
 };
 
-$("btnTune").onclick = () => recommend();
+function fillMissingCurrentParameters() {
+  const defaults = {
+    INDEX_SPEED_START: CAPTURE.INDEX_SPEED_START, START_CREEP_COUNT: CAPTURE.START_CREEP_COUNT,
+    INDEX_SPEED_MAX: CAPTURE.INDEX_SPEED_MAX, ACCEL_SLOPE: CAPTURE.ACCEL_SLOPE,
+    INDEX_SPEED_MIN: CAPTURE.INDEX_SPEED_MIN, DECEL_SLOPE: CAPTURE.DECEL_SLOPE,
+    START_DECEL_COUNTS: CAPTURE.START_DECEL_COUNTS, HOMING_SPEED: CAPTURE.HOMING_SPEED,
+    FMM_REV_SPEED: CAPTURE.FMM_REV_SPEED,
+  };
+  const filled = [];
+  for (const [id, value] of Object.entries(defaults)) {
+    const input = $(id);
+    if (input && !String(input.value).trim()) { input.value = value; filled.push(id.replaceAll("_", " ")); }
+  }
+  return filled;
+}
+function runAutotuneFromCurrent() {
+  const filled = fillMissingCurrentParameters();
+  const status = $("mainTrendStatus");
+  if (status) status.textContent = filled.length
+    ? `현재값으로 시나리오 생성 · 기본값 보완: ${filled.join(", ")}`
+    : "현재 입력값으로 오토튠 시나리오를 만들었습니다.";
+  if (state.csvA?.metrics?.cycleCount >= 3) recommendFromTrend(readP(), state.csvA.metrics);
+  else recommendFromInputs();
+}
+$("btnTune").onclick = runAutotuneFromCurrent;
+$("btnDirectTune").onclick = runAutotuneFromCurrent;
+$("btnMainUpload").onclick = () => $("csvFileA").click();
 $("btnApplyRec").onclick = () => {
   if (!state.rec) return;
   writeP(state.rec);
@@ -3517,6 +3565,8 @@ async function handleCsvFile(file, setType) {
         .filter((entry) => entry.cycle.trace?.length > 1)
         .sort((a, b) => a.delta - b.delta)[0];
       state.selectedTrendCycle = representative ? representative.index : -1;
+      const mainStatus = $("mainTrendStatus");
+      if (mainStatus) mainStatus.textContent = `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 이제 ‘오토튠 시나리오 만들기’를 누르십시오.`;
     }
     state.rec = null;
     state.previewProfile = null;
@@ -3534,6 +3584,11 @@ async function handleCsvFile(file, setType) {
     nameEl.textContent = `${file.name} · 분석 실패`;
     resultEl.innerHTML = `<h3>Trend ${setType}를 읽지 못했습니다</h3><p>${esc(error.message || error)}</p><p>선택칸과 CSV 태그 구성이 일치하는지 확인하십시오.</p>`;
     if (setType === "A") $("csvChartWrap").classList.remove("show");
+    if (setType === "A") {
+      document.body.classList.remove("has-csv");
+      const mainStatus = $("mainTrendStatus");
+      if (mainStatus) mainStatus.textContent = "CSV를 읽지 못했습니다. 현재 파라미터 기반 시나리오는 계속 만들 수 있습니다.";
+    }
     updateCombinedAnalysis();
   }
 }
