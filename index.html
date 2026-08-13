@@ -1232,7 +1232,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.3</span>
+      <span>v2.0.4</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1392,12 +1392,11 @@
       <div class="side-actions">
         <button type="button" class="btn" id="btnCapture">기본값</button>
         <button type="button" class="btn tune" id="btnTune">오토튠 시나리오 만들기</button>
-        <button type="button" class="btn apply" id="btnApplyRec" disabled>선택값 화면 적용</button>
       </div>
 
       <!-- CSV/현재값으로 오토튠한 시나리오는 증상 선택보다 먼저 확인한다. -->
       <div class="rec-box" id="recBox">
-        <h4>추천 시험 시나리오 · 화면 미적용</h4>
+        <h4>추천 시험 시나리오 · 선택하면 화면값 변경</h4>
         <div class="candidate-choices" id="candidateChoices"></div>
         <table id="recTable"></table>
         <div class="rec-why" id="recWhy"></div>
@@ -1639,8 +1638,12 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
+      <b>v2.0.4 · 2026-08-14</b>
+      <p>중복된 ‘선택값 화면 적용’ 버튼을 제거했습니다. 오토튠 시나리오를 선택하면 해당 값이 즉시 화면 입력값·그래프·고급 시뮬레이션에 반영됩니다. 이 페이지는 PLC에 자동 적용하지 않습니다.</p>
+    </article>
+    <article>
       <b>v2.0.3 · 2026-08-14</b>
-      <p>CSV로 만든 선택 시나리오를 고급 시뮬레이션에도 연결했습니다. 고급 탭에서 ‘1사이클 동작’을 누르면 선택 시나리오 값으로 해당 1사이클을 실행하며, 화면 입력값은 ‘선택값 화면 적용’을 누르기 전까지 바뀌지 않습니다. FWD_REV_SPEED 툴팁 제목도 수정했습니다.</p>
+      <p>CSV로 만든 선택 시나리오를 고급 시뮬레이션에도 연결했습니다. 고급 탭의 ‘1사이클 동작’은 선택 시나리오 값으로 실행되며, FWD_REV_SPEED 툴팁 제목도 수정했습니다.</p>
     </article>
     <article>
       <b>v2.0.2 · 2026-08-14</b>
@@ -1876,6 +1879,7 @@ const state = {
   selectedTrendCycle: -1,
   previewProfile: null,
   simProfile: null,
+  tuningBaseProfile: null,
   before: null,
   csvA: null,
   csvB: null,
@@ -2359,8 +2363,8 @@ function drawGraph() {
   // expert formula
   if (state.tab === "expert") {
     const profileStatus = $("expertProfileStatus");
-    if (profileStatus) profileStatus.textContent = state.previewProfile
-      ? `선택 시나리오 ‘${state.profileSource.replace(/ · 고급 시뮬레이션 연결$/, "")}’가 고급 시뮬레이션에 연결되어 있습니다. ‘1사이클 동작’은 이 시나리오 값으로 실행합니다. 화면 입력값은 아직 바뀌지 않았습니다.`
+    if (profileStatus) profileStatus.textContent = state.selectedCandidateId && state.rec
+      ? `선택 시나리오 ‘${state.profileSource.replace(/ · 화면값 반영$/, "")}’가 현재 화면값에 반영되었습니다. ‘1사이클 동작’은 이 값으로 실행합니다.`
       : "현재 화면 입력값으로 시뮬레이션합니다. 오토튠 시나리오를 선택하면 이곳에도 즉시 연결됩니다.";
     $("expertHelp").textContent =
 `ACCEL: v = pos/${p.target} × ${p.accelSlope} + ${p.vstart}
@@ -2650,13 +2654,14 @@ function renderTrendCandidate(candidate) {
   if (!state.running) state.simProfile = null;
   state.selectedCandidateId = candidate.id;
   state.rec = { ...candidate.values };
-  state.previewProfile = { ...candidate.values };
-  state.profileSource = `${candidate.title} · 고급 시뮬레이션 연결`;
+  state.previewProfile = null;
+  state.profileSource = `${candidate.title} · 화면값 반영`;
+  writeP(state.rec);
   const tuneStatus = $("mainTrendStatus");
   if (tuneStatus) tuneStatus.textContent = state.csvA
     ? `CSV 실측 기반 ‘${candidate.title}’ 선택 · 고급 시뮬레이션도 같은 시나리오 값으로 실행합니다.`
     : `현재값 기반 ‘${candidate.title}’ 선택 · 고급 시뮬레이션도 같은 시나리오 값으로 실행합니다.`;
-  const cur = readP();
+  const cur = state.tuningBaseProfile || readP();
   const fields = [
     ["START DECEL COUNTS", cur.startDecel, state.rec.startDecel],
     ["START CREEP COUNT", cur.startCreep, state.rec.startCreep],
@@ -2672,15 +2677,18 @@ function renderTrendCandidate(candidate) {
       if (next) { renderTrendCandidate(next); drawGraph(); }
     };
   });
-  $("recTable").innerHTML = `<tr><th>항목</th><th>현재</th><th>선택 시험값</th></tr>` + fields.map(([name, before, after]) => {
+  $("recTable").innerHTML = `<tr><th>항목</th><th>오토튠 전</th><th>반영값</th></tr>` + fields.map(([name, before, after]) => {
     const changed = Math.abs(before - after) > 1e-9;
     return `<tr><td>${name}</td><td style="color:#889">${round(before)}</td><td style="color:${changed ? "#7fdbff" : "#77838c"}">${round(after)}${changed ? " ◀" : " · 유지"}</td></tr>`;
   }).join("");
-  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>예상 사이클 시간:</b> ${esc(candidate.cycleEstimate || "계산 불가")}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br>한 번에 이 후보의 변경 항목만 화면에 적용해 5분 Trend로 비교하십시오. PLC 자동 적용은 하지 않습니다.`;
+  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>예상 사이클 시간:</b> ${esc(candidate.cycleEstimate || "계산 불가")}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br>이 시나리오 값은 이미 화면 입력칸과 고급 시뮬레이션에 반영되었습니다. PLC에는 자동 적용하지 않습니다.`;
   const candidateKpi = $("candidateCycleKpi");
   if (candidateKpi) candidateKpi.textContent = candidate.cycleEstimate || "계산 불가";
-  $("btnApplyRec").disabled = false;
   $("recBox").classList.add("show");
+  if (!state.running) {
+    drawGraph();
+    updateCycleTimeDisplay();
+  }
 }
 
 function recommendFromTrend(cur, metric) {
@@ -2818,7 +2826,6 @@ function recommend() {
   const indexRule = indexPassGoal ? `<br><b>통과 기준:</b> CSV의 INDEX OFF → 완전 정지 추가 이동 중앙값과 최대값이 현재보다 커지면 이 후보는 폐기합니다. 현재 SC2는 INDEX OFF 후 0 V가 되므로, 파라미터만으로 INDEX OFF 이후 0 counts를 보장할 수 없습니다.` : "";
   $("recWhy").innerHTML = `<b>계산 수준:</b> ${evidence}<br><b>논리흐름 변화:</b> ${logicCompare}<br><br><b>추천 이유</b><br>${why.map((x) => `• ${x}`).join("<br>")}<br><br><b>원칙:</b> START CREEP·DECEL SLOPE·MIN은 실측 전 자동 변경하지 않습니다. 한 번에 한 조건으로 화면에서 비교한 뒤 현장 저속 시험과 승인을 거쳐야 합니다.${indexRule}${diagnosisFirst ? "<br><b>진단 우선:</b> 선택 증상 또는 CSV 편차 때문에 이 화면은 파라미터 후보를 만들지 않습니다." : ""}`;
   $("recBox").classList.add("show");
-  $("btnApplyRec").disabled = !hasChanges || recommendedLogic.warnings.length > 0;
 }
 
 function recommendFromInputs() {
@@ -3497,7 +3504,6 @@ $("btnCapture").onclick = () => {
   state.previewProfile = null;
   state.profileSource = "캡처값 기준";
   $("recBox").classList.remove("show");
-  $("btnApplyRec").disabled = true;
   drawGraph();
 };
 
@@ -3518,6 +3524,8 @@ function fillMissingCurrentParameters() {
 }
 function runAutotuneFromCurrent() {
   const filled = fillMissingCurrentParameters();
+  state.tuningBaseProfile = { ...readP() };
+  disableLinkedTune("OFF: 오토튠 시나리오 선택으로 연결 기준을 초기화했습니다.");
   const status = $("mainTrendStatus");
   if (status) status.textContent = filled.length
     ? `현재값으로 시나리오 생성 · 기본값 보완: ${filled.join(", ")}`
@@ -3528,19 +3536,6 @@ function runAutotuneFromCurrent() {
 $("btnTune").onclick = runAutotuneFromCurrent;
 $("btnDirectTune").onclick = runAutotuneFromCurrent;
 $("btnMainUpload").onclick = () => $("csvFileA").click();
-$("btnApplyRec").onclick = () => {
-  if (!state.rec) return;
-  writeP(state.rec);
-  disableLinkedTune("OFF: 추천 시험값 적용으로 연결 기준을 초기화했습니다.");
-  state.profileSource = "추천 시험값 적용 기준";
-  state.rec = null;
-  state.previewProfile = null;
-  $("recBox").classList.remove("show");
-  $("btnApplyRec").disabled = true;
-  stopCycle(true);
-  drawGraph();
-};
-
 document.querySelectorAll("#probChips .chip").forEach((b) => {
   b.setAttribute("aria-pressed", "false");
   b.onclick = () => {
@@ -3566,7 +3561,6 @@ document.querySelectorAll("#probChips .chip").forEach((b) => {
     state.rec = null;
     state.previewProfile = null;
     $("recBox").classList.remove("show");
-    $("btnApplyRec").disabled = true;
   };
 });
 document.querySelectorAll("#tempChips .chip").forEach((b) => {
@@ -3577,7 +3571,6 @@ document.querySelectorAll("#tempChips .chip").forEach((b) => {
     state.rec = null;
     state.previewProfile = null;
     $("recBox").classList.remove("show");
-    $("btnApplyRec").disabled = true;
     updateTemperatureEvidence();
     updateCombinedAnalysis();
   };
@@ -3621,7 +3614,6 @@ async function handleCsvFile(file, setType) {
     state.rec = null;
     state.previewProfile = null;
     $("recBox").classList.remove("show");
-    $("btnApplyRec").disabled = true;
     nameEl.textContent = `${file.name} · ${dataset.sampleCount.toLocaleString()} samples · 로컬 분석 완료`;
     renderDatasetResult(dataset);
     if (setType === "A") {
@@ -3670,7 +3662,6 @@ document.querySelectorAll(".hmi-screen input, .expert-extra input").forEach((el)
     state.rec = null;
     state.previewProfile = null;
     $("recBox").classList.remove("show");
-    $("btnApplyRec").disabled = true;
     if (!state.running) {
       drawGraph();
       updateCycleTimeDisplay();
@@ -3681,7 +3672,6 @@ $("OIL_TEMP_C")?.addEventListener("input", () => {
   state.rec = null;
   state.previewProfile = null;
   $("recBox").classList.remove("show");
-  $("btnApplyRec").disabled = true;
   updateTemperatureEvidence();
   updateCombinedAnalysis();
 });
