@@ -133,8 +133,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(370px, 430px);
     min-height: 0;
   }
-  body.mode-basic:not(.has-csv) .workspace { grid-template-columns: 1fr; }
-  body.mode-basic:not(.has-csv) .stage { display: none; }
   @media (max-width: 900px) {
     .workspace {
       grid-template-columns: 1fr;
@@ -1035,12 +1033,11 @@
       display: block;
       overflow: visible;
     }
-    .stage {
-      display: none;
+    body.mode-basic .stage {
+      display: none !important;
       min-height: 0;
       border-right: 0;
     }
-    body.has-csv .stage { display: flex; }
     .stage-tools, .chain-box, .operator-strip, .logic-strip, .logic-warning, .creep-guide { display: none !important; }
     .stage-tools {
       display: grid;
@@ -1223,7 +1220,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.0</span>
+      <span>v2.0.1</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1626,6 +1623,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v2.0.1 · 2026-08-14</b>
+      <p>자동 튜닝 탭의 그래프는 PC에서 CSV 입력 여부와 관계없이 표시하고, 모바일에서만 항상 숨기도록 수정했습니다. 고급 시뮬레이션 탭은 기존대로 그래프를 표시합니다.</p>
+    </article>
     <article>
       <b>v2.0.0 · 2026-08-14</b>
       <p>페이지 목적을 SC2 파라미터 오토튜닝으로 재정의했습니다. 메인에서 PLC Trend CSV 업로드 또는 현재값 입력으로 시작하고, 사이클 단축·균형·INDEX 통과 감소의 3개 시나리오와 예상 사이클 시간을 제공합니다. 고급 탭에서만 이론 시뮬레이션을 실행합니다.</p>
