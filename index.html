@@ -1233,7 +1233,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.8</span>
+      <span>v2.0.9</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1639,8 +1639,8 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
-      <b>v2.0.0–v2.0.8 · 2026-08-14</b>
-      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. 자동 INDEX에 직접 영향을 주는 7개 값(START/MAX/MIN, ACCEL/DECEL SLOPE, START DECEL/CREEP)을 함께 계산하고, HOMING·FWD/REV는 별도 동작이라 유지 사유를 표시합니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 재생하고, 후보값은 ACCEL/FULL/DECEL/CREEP별 실측 속도 곡선을 따라 제한적으로 보정합니다. 구간 데이터가 부족하면 후보 보정 대신 계산 모델을 사용합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
+      <b>v2.0.0–v2.0.9 · 2026-08-14</b>
+      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. 자동 INDEX에 직접 영향을 주는 7개 값(START/MAX/MIN, ACCEL/DECEL SLOPE, START DECEL/CREEP)을 함께 계산하고, HOMING·FWD/REV는 별도 동작이라 유지 사유를 표시합니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 그대로 재생합니다. 후보는 CSV의 ACCEL/FULL/DECEL/실제 CREEP 시간축을 새 파라미터의 위치 경계로 재매핑하므로, DECEL 시작·실제 CREEP 진입·START CREEP 식 기준의 시간과 속도 모양을 함께 확인할 수 있습니다. 실제 DECEL·CREEP 태그 전환 또는 연속 데이터가 부족하면 후보 보정 대신 계산 모델을 사용합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
     </article>
     <article>
       <b>v1.4.0 · 2026-08-11</b>
@@ -1888,7 +1888,46 @@ function tracePhase(point) {
   return "FULL";
 }
 
-function measuredResponseFromCycle(cycle) {
+function traceIndexAtPosition(trace, target, fallback) {
+  if (!Number.isFinite(target)) return fallback;
+  for (let i = 1; i < trace.length; i++) {
+    if (trace[i - 1].pos <= target && trace[i].pos >= target) return i;
+  }
+  return fallback;
+}
+
+function sourceTimeSegments(trace, referenceProfile) {
+  if (trace.length < 6) return null;
+  const first = Math.max(0, trace.findIndex((point) => Math.abs(point.cmd) > 0.05));
+  const movingEnd = Math.max(first + 1, trace.map((point, index) => ({ point, index })).filter(({ point }) => Math.abs(point.cmd) > 0.05).at(-1)?.index || trace.length - 2);
+  const stop = Math.min(trace.length - 1, Math.max(movingEnd + 1, first + 4));
+  const refLogic = referenceProfile ? deriveProfileLogic(referenceProfile) : null;
+  const firstAfter = (from, test, fallback) => {
+    const index = trace.findIndex((point, i) => i >= from && test(point));
+    return index >= 0 ? index : fallback;
+  };
+  let decel = firstAfter(first + 1, (point) => point.decel > 0.5, traceIndexAtPosition(trace, refLogic?.decelStart, Math.round((first + stop) * 0.62)));
+  let creep = firstAfter(Math.max(first + 1, decel + 1), (point) => point.creep > 0.5, traceIndexAtPosition(trace, refLogic?.creepEnter, Math.round((decel + stop) * 0.55)));
+  let full = firstAfter(first + 1, (point) => point.full > 0.5, Math.min(decel, Math.round((first + decel) * 0.55)));
+  full = clampValue(full, first + 1, Math.max(first + 1, decel));
+  decel = clampValue(decel, full + 1, Math.max(full + 1, creep));
+  creep = clampValue(creep, decel + 1, Math.max(decel + 1, stop));
+  if (!(first < full && full < decel && decel < creep && creep < stop)) return null;
+  const taggedDecel = trace.some((point, i) => i >= first && i <= stop && point.decel > 0.5);
+  const taggedCreep = trace.some((point, i) => i >= decel && i <= stop && point.creep > 0.5);
+  return {
+    segments: [
+      { phase: "ACCEL", from: first, to: full },
+      { phase: "FULL", from: full, to: decel },
+      { phase: "DECEL", from: decel, to: creep },
+      { phase: "CREEP", from: creep, to: stop },
+    ],
+    taggedDecel,
+    taggedCreep,
+  };
+}
+
+function measuredResponseFromCycle(cycle, referenceProfile = null) {
   const trace = cycle?.trace?.filter((point) => Number.isFinite(point.t) && Number.isFinite(point.pos) && Number.isFinite(point.cmd)) || [];
   if (trace.length < 3 || !(cycle.durationSec > 0)) return null;
   const rates = { ACCEL: [], FULL: [], DECEL: [], CREEP: [] };
@@ -1907,6 +1946,7 @@ function measuredResponseFromCycle(cycle) {
   }
   const fallbackRate = median(Object.values(rates).flat()) || 1;
   const fallbackVolt = median(Object.values(volts).flat()) || 1;
+  const timeline = sourceTimeSegments(trace, referenceProfile);
   return {
     trace,
     durationSec: cycle.durationSec,
@@ -1914,18 +1954,20 @@ function measuredResponseFromCycle(cycle) {
     volts: Object.fromEntries(Object.keys(volts).map((phase) => [phase, median(volts[phase]) || fallbackVolt])),
     curves,
     adjustmentReady: Object.values(curves).filter((curve) => curve.length >= 5).length >= 3,
+    timeline,
+    timelineReady: Boolean(timeline?.taggedDecel && timeline?.taggedCreep),
   };
 }
 
 function simulationModeFor(profile) {
   if (!state.measuredResponse) return "model";
   if (profilesEqual(profile, state.csvReferenceProfile)) return "measured";
-  return state.measuredResponse.adjustmentReady ? "measured-adjusted" : "model";
+  return state.measuredResponse.adjustmentReady && state.measuredResponse.timelineReady ? "measured-adjusted" : "model";
 }
 
 function simulationModeLabel(mode = state.simMode) {
   if (mode === "measured") return "CSV 대표 1사이클 실측 재현";
-  if (mode === "measured-adjusted") return "CSV 구간 응답 보정 후보";
+  if (mode === "measured-adjusted") return "CSV 시간축 재매핑 후보";
   return "계산 모델";
 }
 
@@ -2387,9 +2429,16 @@ function drawGraph() {
       const detail = mode === "measured"
         ? "CSV 대표 1사이클의 실제 시간·위치·구간을 그대로 재생합니다."
         : mode === "measured-adjusted"
-          ? "CSV의 ACCEL·FULL·DECEL·CREEP 속도 곡선을 따라 후보값의 구간 경계와 전압만 제한적으로 보정합니다."
+          ? (() => {
+              const playback = buildCandidatePlayback(p, state.measuredResponse);
+              const timing = playback?.eventTimes;
+              const text = timing
+                ? `DECEL [${Math.round(p.startDecel)}] ≈${timing.decel.toFixed(2)} s · 실제 CREEP [${Math.round(logic.creepEnter)}] ≈${timing.actualCreep.toFixed(2)} s · START CREEP 식 기준 [${Math.round(p.startCreep)}] ≈${Number.isFinite(timing.startCreep) ? timing.startCreep.toFixed(2) : "-"} s`
+                : "후보 시간축 계산 불가";
+              return `CSV 대표 사이클의 ACCEL·FULL·DECEL·CREEP 시간축을 후보 위치 경계로 재매핑합니다. ${text}`;
+            })()
           : state.measuredResponse
-            ? "CSV에 후보 보정용 구간 데이터가 부족해 계산 모델로 재생합니다."
+            ? "CSV에 실제 DECEL·CREEP 태그 전환 또는 연속 구간 데이터가 부족해 계산 모델로 재생합니다."
             : "CSV가 없어 계산 모델로 재생합니다.";
       profileStatus.textContent = `${source} ${detail}`;
     }
@@ -2484,7 +2533,12 @@ function startCycle() {
   // 선택된 오토튠 시나리오 또는 현재 입력값을 1사이클 동안 고정한다.
   state.simProfile = { ...(state.previewProfile || readP()) };
   state.simMode = simulationModeFor(state.simProfile);
-  state.simPlayback = state.simMode === "measured" ? { trace: state.measuredResponse.trace, index: 0, durationSec: state.measuredResponse.durationSec } : null;
+  state.simPlayback = state.simMode === "measured"
+    ? { trace: state.measuredResponse.trace, index: 0, durationSec: state.measuredResponse.durationSec, source: "measured" }
+    : state.simMode === "measured-adjusted"
+      ? buildCandidatePlayback(state.simProfile, state.measuredResponse)
+      : null;
+  if (state.simMode === "measured-adjusted" && !state.simPlayback) state.simMode = "model";
 
   state.running = true;
   state.paused = false;
@@ -2546,6 +2600,81 @@ function phaseProgress(p, phase, pos) {
   return Math.max(0, Math.min(1, (pos - bounds[0]) / Math.max(1, bounds[1] - bounds[0])));
 }
 
+function averageCandidateVoltage(profile, logic, start, end) {
+  const samples = 9;
+  let sum = 0;
+  for (let i = 0; i < samples; i++) {
+    const pos = start + ((end - start) * i) / Math.max(1, samples - 1);
+    sum += Math.abs(evalAt(pos, profile, logic).v);
+  }
+  return sum / samples;
+}
+
+function timeAtPlaybackPosition(trace, position) {
+  for (let i = 1; i < trace.length; i++) {
+    const a = trace[i - 1], b = trace[i];
+    if (a.pos <= position && b.pos >= position) {
+      const ratio = (position - a.pos) / Math.max(1e-9, b.pos - a.pos);
+      return (a.t + (b.t - a.t) * ratio - trace[0].t) / 1000;
+    }
+  }
+  return NaN;
+}
+
+function buildCandidatePlayback(profile, response = state.measuredResponse) {
+  const trace = response?.trace;
+  const source = response?.timeline?.segments;
+  if (!trace?.length || !source?.length || !response.timelineReady) return null;
+  const logic = deriveProfileLogic(profile);
+  if (!logic.hasCreepBeforeIndex) return null;
+  const candidateBounds = {
+    ACCEL: [0, logic.accelEnd],
+    FULL: [logic.accelEnd, logic.decelStart],
+    DECEL: [logic.decelStart, logic.creepEnter],
+    CREEP: [logic.creepEnter, logic.stopPos],
+  };
+  const baseT = trace[0].t;
+  const mapped = [];
+  let elapsed = 0;
+  const eventTimes = {};
+  for (const segment of source) {
+    const points = trace.slice(segment.from, segment.to + 1);
+    const [candidateStart, candidateEnd] = candidateBounds[segment.phase] || [];
+    if (points.length < 2 || !(candidateEnd > candidateStart)) return null;
+    const sourceStart = points[0];
+    const sourceEnd = points.at(-1);
+    const sourceDuration = (sourceEnd.t - sourceStart.t) / 1000;
+    const sourceDistance = sourceEnd.pos - sourceStart.pos;
+    if (!(sourceDuration > 0) || !(sourceDistance > 0)) return null;
+    const sourceVoltage = median(points.map((point) => Math.abs(point.cmd)).filter((value) => value > 0.05)) || response.volts?.[segment.phase] || 1;
+    const candidateVoltage = averageCandidateVoltage(profile, logic, candidateStart, candidateEnd);
+    // 실제 CSV 시간축을 우선 보존하고, 후보 전압 변화만 0.78~1.22배 범위에서 시간에 반영한다.
+    const durationScale = clampValue(sourceVoltage / Math.max(candidateVoltage, 0.05), 0.78, 1.22);
+    const candidateDuration = sourceDuration * durationScale;
+    eventTimes[segment.phase] = elapsed;
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      const timeRatio = clampValue((point.t - sourceStart.t) / Math.max(1, sourceEnd.t - sourceStart.t), 0, 1);
+      const positionRatio = clampValue((point.pos - sourceStart.pos) / sourceDistance, 0, 1);
+      const pos = candidateStart + (candidateEnd - candidateStart) * positionRatio;
+      mapped.push({
+        t: baseT + (elapsed + candidateDuration * timeRatio) * 1000,
+        pos,
+        cmd: Math.abs(evalAt(pos, profile, logic).v),
+        phase: segment.phase,
+      });
+    }
+    elapsed += candidateDuration;
+  }
+  if (mapped.length < 3 || !(elapsed > 0)) return null;
+  const last = mapped.at(-1);
+  mapped.push({ t: baseT + elapsed * 1000, pos: logic.stopPos, cmd: 0, phase: "STOP" });
+  eventTimes.startCreep = timeAtPlaybackPosition(mapped, profile.startCreep);
+  eventTimes.actualCreep = eventTimes.CREEP;
+  eventTimes.decel = eventTimes.DECEL;
+  return { trace: mapped, index: 0, durationSec: elapsed, source: "csv-time-mapped", eventTimes, last };
+}
+
 function responseRateAt(p, phase, pos, cmdV, response) {
   const curve = response?.curves?.[phase];
   if (!curve?.length) return NaN;
@@ -2574,6 +2703,11 @@ function encoderRate(p, cmdV, phase = "FULL", pos = 0, response = state.measured
 function estimateCycleSeconds(p) {
   const mode = simulationModeFor(p);
   if (mode === "measured") return state.measuredResponse.durationSec;
+  if (mode === "measured-adjusted") {
+    if (state.running && state.simPlayback && profilesEqual(p, state.simProfile)) return state.simPlayback.durationSec;
+    const playback = buildCandidatePlayback(p, state.measuredResponse);
+    if (playback) return playback.durationSec;
+  }
   let pos = 0;
   let elapsed = 0;
   const dt = 1 / 120;
@@ -2631,7 +2765,7 @@ function stepSim(dt, renderNow = true) {
   const mul = parseFloat($("speedMul").value) || 1;
   state.cycleElapsed += dt * mul;
 
-  if (state.simMode === "measured" && state.simPlayback) {
+  if ((state.simMode === "measured" || state.simMode === "measured-adjusted") && state.simPlayback) {
     const playback = state.simPlayback;
     const trace = playback.trace;
     const targetT = trace[0].t + Math.min(state.cycleElapsed, playback.durationSec) * 1000;
@@ -2640,7 +2774,7 @@ function stepSim(dt, renderNow = true) {
     const ratio = b.t > a.t ? Math.max(0, Math.min(1, (targetT - a.t) / (b.t - a.t))) : 0;
     state.pos = a.pos + (b.pos - a.pos) * ratio;
     state.v = Math.abs(a.cmd + (b.cmd - a.cmd) * ratio);
-    state.phase = tracePhase(ratio < 0.5 ? a : b);
+    state.phase = (ratio < 0.5 ? a : b).phase || tracePhase(ratio < 0.5 ? a : b);
     state.trail.push({ pos: state.pos, v: state.v, phase: state.phase });
     if (state.trail.length > 2500) state.trail.shift();
     if (state.cycleElapsed >= playback.durationSec) {
@@ -3823,10 +3957,10 @@ async function handleCsvFile(file, setType) {
         .sort((a, b) => a.delta - b.delta)[0];
       state.selectedTrendCycle = representative ? representative.index : -1;
       state.csvReferenceProfile = { ...readP() };
-      state.measuredResponse = measuredResponseFromCycle(representative?.cycle);
+      state.measuredResponse = measuredResponseFromCycle(representative?.cycle, state.csvReferenceProfile);
       const mainStatus = $("mainTrendStatus");
       if (mainStatus) mainStatus.textContent = state.measuredResponse
-        ? `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 고급 탭에서 대표 실측 1사이클을 재생할 수 있습니다.`
+        ? `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 고급 탭에서 대표 실측 1사이클과 후보 시간축 재매핑을 확인할 수 있습니다.`
         : `${file.name} 분석 완료 · ${dataset.metrics.cycleCount || 0}사이클 · 대표 실측 재생에 필요한 연속 데이터가 부족합니다.`;
     }
     state.rec = null;
