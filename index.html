@@ -416,6 +416,22 @@
   .autotune-paths button { border: 1px solid #3c6d7c; background: #18313b; color: var(--text); border-radius: 8px; padding: 10px; font: inherit; font-size: .82rem; font-weight: 800; text-align: left; }
   .autotune-paths button.secondary { border-color: #59636a; background: #1b252b; }
   .autotune-paths small { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; line-height: 1.35; }
+  .sample-trend-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 9px;
+    padding: 8px 10px;
+    border: 1px solid #77612a;
+    border-radius: 8px;
+    background: #27210f;
+    color: #f5c042;
+    font-size: .79rem;
+    font-weight: 800;
+    text-decoration: none;
+  }
+  .sample-trend-link:hover { background: #342b10; color: #ffe28a; }
+  .sample-trend-note { margin: 5px 0 0; color: var(--muted); font-size: .73rem; line-height: 1.4; }
   .tune-status { margin-top: 9px; color: #9fd7e9; font-size: .78rem; line-height: 1.4; }
   .hmi-screen {
     background: var(--hmi-panel);
@@ -1052,6 +1068,8 @@
       border-right: 0;
     }
     .stage-tools, .chain-box, .operator-strip, .logic-strip, .logic-warning, .creep-guide { display: none !important; }
+    /* 고급 시뮬레이션에서는 모바일에서도 운전 제어를 반드시 노출한다. */
+    body.mode-expert .stage-tools { display: grid !important; }
     .stage-tools {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1233,7 +1251,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.9</span>
+      <span>v2.1.0</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1342,6 +1360,8 @@
           <button type="button" id="btnMainUpload">① PLC Trend CSV 업로드<small>10 ms Trend A 한 파일로 실제 사이클·INDEX 이동을 분석</small></button>
           <button type="button" class="secondary" id="btnDirectTune">② 현재값으로 오토튠<small>빈 칸은 수정 적용본 기본값으로 보완</small></button>
         </div>
+        <a class="sample-trend-link" href="samples/sc2_trend_a_after_tuning_sample.csv" download="SC2_Trend_A_후정적용본_샘플.csv">↓ 수정 적용본 샘플 CSV 다운로드 · 업로드 시험</a>
+        <div class="sample-trend-note">실제 설비 Trend A 예제입니다. 내려받은 파일을 위 ‘PLC Trend CSV 업로드’에서 다시 선택해 분석·시나리오·고급 시뮬레이션을 시험할 수 있습니다.</div>
         <div class="tune-status" id="mainTrendStatus">CSV 미입력 · 현재 파라미터 기반 시나리오를 만들 수 있습니다.</div>
       </section>
       <div class="hmi-screen" id="hmiScreen">
@@ -1468,6 +1488,17 @@
   <p class="lead">
     <b>1.</b> 정상 자동운전에서 <b>10 ms · 5분</b> 동안 Trend A를 캡처합니다. <b>2.</b> 자동 튜닝 화면의 ‘PLC Trend CSV 업로드’를 누릅니다. <b>3.</b> 세 시나리오 중 하나를 골라 화면값으로만 먼저 적용합니다. <b>4.</b> 현장 적용 후 새 Trend와 증상을 다시 넣어 한 단계씩 조정합니다. CSV는 이 브라우저 안에서만 처리되며 외부로 전송되지 않습니다.
   </p>
+
+  <section class="collect-procedure" aria-labelledby="sampleTrendTitle">
+    <h3 id="sampleTrendTitle">바로 시험할 수정 적용본 샘플</h3>
+    <p class="sample-trend-note">아래 파일은 <code>ic_conveyor_position_후정적용본.CSV</code>을 업로드 시험용으로 포함한 Trend A 예제입니다. 설비에 값을 자동 적용하지 않으며, 페이지의 CSV 분석과 고급 시뮬레이션 확인 용도입니다.</p>
+    <a class="sample-trend-link" href="samples/sc2_trend_a_after_tuning_sample.csv" download="SC2_Trend_A_후정적용본_샘플.csv">↓ 샘플 CSV 다운로드 (수정 적용본)</a>
+    <ol style="margin-top:10px">
+      <li>파일을 내려받습니다.</li>
+      <li><b>자동 튜닝</b> 탭 상단의 <b>PLC Trend CSV 업로드</b>를 누르고, 내려받은 파일을 선택합니다.</li>
+      <li>분석 완료 후 시나리오를 고르고, <b>고급 시뮬레이션</b> 탭의 <b>▶ 1사이클 동작</b>으로 CSV 시간축 기반 움직임을 확인합니다.</li>
+    </ol>
+  </section>
 
   <div class="meaning-grid" aria-label="분석 결과 의미">
     <div class="meaning-item"><b style="color:#7fbdff">측정</b><p>CSV에 직접 기록된 시간·위치·지령·상태값입니다.</p></div>
@@ -1638,6 +1669,10 @@
 
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
+    <article>
+      <b>v2.1.0 · 2026-08-15</b>
+      <p>수정 적용본 Trend A CSV를 페이지에 포함해 메인 첫 화면과 도움말에서 내려받아 바로 업로드 시험할 수 있게 했습니다. 모바일 고급 시뮬레이션에도 1사이클 동작·일시정지·정지·위치 리셋·배속 제어를 표시합니다.</p>
+    </article>
     <article>
       <b>v2.0.0–v2.0.9 · 2026-08-14</b>
       <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. 자동 INDEX에 직접 영향을 주는 7개 값(START/MAX/MIN, ACCEL/DECEL SLOPE, START DECEL/CREEP)을 함께 계산하고, HOMING·FWD/REV는 별도 동작이라 유지 사유를 표시합니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 그대로 재생합니다. 후보는 CSV의 ACCEL/FULL/DECEL/실제 CREEP 시간축을 새 파라미터의 위치 경계로 재매핑하므로, DECEL 시작·실제 CREEP 진입·START CREEP 식 기준의 시간과 속도 모양을 함께 확인할 수 있습니다. 실제 DECEL·CREEP 태그 전환 또는 연속 데이터가 부족하면 후보 보정 대신 계산 모델을 사용합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
