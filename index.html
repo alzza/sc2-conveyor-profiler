@@ -656,9 +656,10 @@
   }
   .rec-box.show { display: block; }
   .rec-box h4 { margin: 0 0 7px; color: var(--amber); font-size: 0.86rem; }
-  .rec-box table { width: 100%; border-collapse: collapse; }
-  .rec-box td { padding: 3px 0; color: var(--muted); }
-  .rec-box td:last-child { text-align: right; color: var(--amber); font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
+  .rec-box table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+  .rec-box th, .rec-box td { padding: 4px 3px; color: var(--muted); text-align: left; vertical-align: top; line-height: 1.35; }
+  .rec-box th { color: #d8c66f; font-weight: 700; border-bottom: 1px solid #4d421d; }
+  .rec-box td:nth-child(2), .rec-box td:nth-child(3) { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
   .rec-why {
     margin-top: 7px;
     padding-top: 7px;
@@ -1232,7 +1233,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.7</span>
+      <span>v2.0.8</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1396,7 +1397,7 @@
 
       <!-- CSV/현재값으로 오토튠한 시나리오는 증상 선택보다 먼저 확인한다. -->
       <div class="rec-box" id="recBox">
-        <h4>추천 시험 시나리오 · 선택하면 화면값 변경</h4>
+        <h4>추천 시험 시나리오 · 자동 INDEX 7개 연동 / Homing·FWD/REV 유지</h4>
         <div class="candidate-choices" id="candidateChoices"></div>
         <table id="recTable"></table>
         <div class="rec-why" id="recWhy"></div>
@@ -1638,8 +1639,8 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
-      <b>v2.0.0–v2.0.7 · 2026-08-14</b>
-      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 재생하고, 후보값은 ACCEL/FULL/DECEL/CREEP별 실측 속도 곡선을 따라 제한적으로 보정합니다. 구간 데이터가 부족하면 후보 보정 대신 계산 모델을 사용합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
+      <b>v2.0.0–v2.0.8 · 2026-08-14</b>
+      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. 자동 INDEX에 직접 영향을 주는 7개 값(START/MAX/MIN, ACCEL/DECEL SLOPE, START DECEL/CREEP)을 함께 계산하고, HOMING·FWD/REV는 별도 동작이라 유지 사유를 표시합니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 재생하고, 후보값은 ACCEL/FULL/DECEL/CREEP별 실측 속도 곡선을 따라 제한적으로 보정합니다. 구간 데이터가 부족하면 후보 보정 대신 계산 모델을 사용합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
     </article>
     <article>
       <b>v1.4.0 · 2026-08-11</b>
@@ -2744,12 +2745,7 @@ function renderTrendCandidate(candidate) {
     ? `CSV 실측 기반 ‘${candidate.title}’ 선택 · 고급 시뮬레이션도 같은 시나리오 값으로 실행합니다.`
     : `현재값 기반 ‘${candidate.title}’ 선택 · 고급 시뮬레이션도 같은 시나리오 값으로 실행합니다.`;
   const cur = state.tuningBaseProfile || readP();
-  const fields = [
-    ["START DECEL COUNTS", cur.startDecel, state.rec.startDecel],
-    ["START CREEP COUNT", cur.startCreep, state.rec.startCreep],
-    ["DECEL SLOPE", cur.decelSlope, state.rec.decelSlope],
-    ["INDEX SPEED MIN", cur.vmin, state.rec.vmin],
-  ];
+  const fields = autoTuneFieldRows(cur, state.rec, candidate.parameterReasons);
   $("candidateChoices").innerHTML = state.candidates.map((item) =>
     `<button type="button" class="candidate-choice ${item.id === candidate.id ? "on" : ""}" data-candidate-id="${item.id}"><b>${esc(item.title)}</b><small>${esc(item.characteristic)}</small><em>${esc(item.cycleEstimate || "예상 사이클 시간 계산 불가")}</em></button>`
   ).join("");
@@ -2759,11 +2755,11 @@ function renderTrendCandidate(candidate) {
       if (next) { renderTrendCandidate(next); drawGraph(); }
     };
   });
-  $("recTable").innerHTML = `<tr><th>항목</th><th>오토튠 전</th><th>반영값</th></tr>` + fields.map(([name, before, after]) => {
+  $("recTable").innerHTML = `<tr><th>9개 화면 입력값</th><th>오토튠 전</th><th>반영값</th><th>판단</th></tr>` + fields.map(([name, before, after, reason]) => {
     const changed = Math.abs(before - after) > 1e-9;
-    return `<tr><td>${name}</td><td style="color:#889">${round(before)}</td><td style="color:${changed ? "#7fdbff" : "#77838c"}">${round(after)}${changed ? " ◀" : " · 유지"}</td></tr>`;
+    return `<tr><td>${name}</td><td style="color:#889">${round(before)}</td><td style="color:${changed ? "#7fdbff" : "#77838c"}">${round(after)}${changed ? " ◀" : " · 유지"}</td><td style="color:${changed ? "#b9d8ed" : "#77838c"}">${esc(reason)}</td></tr>`;
   }).join("");
-  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>예상 사이클 시간:</b> ${esc(candidate.cycleEstimate || "계산 불가")}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br>이 시나리오 값은 이미 화면 입력칸과 고급 시뮬레이션에 반영되었습니다. PLC에는 자동 적용하지 않습니다.`;
+  $("recWhy").innerHTML = `<b>실측 근거:</b> ${esc(candidate.evidence)}<br><b>예상 사이클 시간:</b> ${esc(candidate.cycleEstimate || "계산 불가")}<br><b>특성:</b> ${esc(candidate.characteristic)}<br><b>통과 기준:</b> ${esc(candidate.guard)}<br><br><b>자동 INDEX 조정:</b> START/MAX/MIN·ACCEL/DECEL SLOPE·START DECEL/CREEP의 7개 값을 함께 계산합니다. <b>유지:</b> HOMING SPEED와 FWD/REV SPEED는 이 CSV의 자동 INDEX 1사이클과 별도 동작이므로 근거 없이 변경하지 않습니다.<br><br>이 시나리오 값은 이미 화면 입력칸과 고급 시뮬레이션에 반영되었습니다. PLC에는 자동 적용하지 않습니다.`;
   const candidateKpi = $("candidateCycleKpi");
   if (candidateKpi) candidateKpi.textContent = candidate.cycleEstimate || "계산 불가";
   $("recBox").classList.add("show");
@@ -2773,20 +2769,147 @@ function renderTrendCandidate(candidate) {
   }
 }
 
+const AUTO_TUNE_INDEX_FIELDS = [
+  ["INDEX SPEED START", "vstart"],
+  ["INDEX SPEED MAX", "vmax"],
+  ["INDEX SPEED MIN", "vmin"],
+  ["ACCEL SLOPE", "accelSlope"],
+  ["START DECEL COUNTS", "startDecel"],
+  ["START CREEP COUNT", "startCreep"],
+  ["DECEL SLOPE", "decelSlope"],
+  ["HOMING SPEED", "vhome"],
+  ["FWD/REV SPEED", "vmanual"],
+];
+
+function clampValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeAutoTuneValues(values) {
+  const out = { ...values };
+  out.vmax = round(Math.max(out.vmax, out.vstart + 0.05, out.vmin + 0.05));
+  out.vstart = round(clampValue(out.vstart, 0.1, out.vmax - 0.05));
+  out.vmin = round(clampValue(out.vmin, 0.1, out.vmax - 0.05));
+  out.accelSlope = round(Math.max(0.05, out.accelSlope));
+  out.decelSlope = round(Math.min(-0.05, out.decelSlope));
+  out.startDecel = Math.round(Math.max(200, out.startDecel));
+  out.startCreep = Math.round(Math.max(out.startDecel + 100, out.startCreep));
+  return out;
+}
+
+function autoTuneFieldRows(before, after, reasons = {}) {
+  return AUTO_TUNE_INDEX_FIELDS.map(([name, key]) => [
+    name,
+    before[key],
+    after[key],
+    reasons[key] || (key === "vhome" || key === "vmanual"
+      ? "별도 동작 태그라 유지"
+      : "자동 INDEX 1사이클 계산에 포함"),
+  ]);
+}
+
+function createAutoTuneScenario(cur, kind, metric = null) {
+  const span = Math.max(100, cur.startCreep - cur.startDecel);
+  const overrun = Math.max(0, Number(metric?.indexOverrunCounts || metric?.overrunCounts || 0));
+  const protectIndex = overrun > 10;
+  const fastCreepShift = Math.max(45, Math.min(90, Math.round(span * 0.10)));
+  const safeDecelAdvance = protectIndex ? Math.max(15, Math.min(60, Math.round(overrun * 0.35))) : 0;
+  let values = { ...cur };
+  let title = "";
+  let characteristic = "";
+  let guard = "";
+  const parameterReasons = {
+    vhome: "Homing 전용: 자동 INDEX CSV와 분리되어 유지",
+    vmanual: "FWD/REV 전용: 자동 INDEX CSV와 분리되어 유지",
+  };
+
+  if (kind === "cycle") {
+    title = "① 사이클 단축 우선 · 7개 연동";
+    values = {
+      ...cur,
+      vstart: cur.vstart + 0.02,
+      vmax: cur.vmax + (protectIndex ? 0.02 : 0.05),
+      vmin: cur.vmin - (protectIndex ? 0.02 : 0.01),
+      accelSlope: cur.accelSlope * 1.035,
+      startDecel: cur.startDecel - safeDecelAdvance,
+      startCreep: cur.startCreep + fastCreepShift,
+      decelSlope: cur.decelSlope * 1.03,
+    };
+    characteristic = `가속·최고속은 소폭 올리고, 감속은 ${safeDecelAdvance ? safeDecelAdvance + " counts 앞당겨" : "기준 위치를 유지해"} INDEX 여유를 보존하면서 CREEP 이동을 줄이는 안입니다.`;
+    guard = "사이클 중앙시간은 감소하고, INDEX OFF 후 추가 이동의 중앙·최대값은 현재보다 커지지 않아야 합니다.";
+    Object.assign(parameterReasons, {
+      vstart: "출발 응답 확인: +0.02 V",
+      vmax: protectIndex ? "INDEX 추가이동 관측: +0.02 V로 제한" : "전체 구간 단축: +0.05 V",
+      vmin: protectIndex ? "INDEX 여유 확보: −0.02 V" : "정지 여유 확보: −0.01 V",
+      accelSlope: "MAX 도달 시간 단축: +3.5%",
+      startDecel: safeDecelAdvance ? `추가 이동 보정: ${safeDecelAdvance} counts 앞당김` : "현재 감속 시작 위치 유지",
+      startCreep: `저속 CREEP 거리 축소: +${fastCreepShift} counts`,
+      decelSlope: "감속 구배 보강: 절대값 +3%",
+    });
+  } else if (kind === "balance") {
+    const creepShift = Math.max(25, Math.min(50, Math.round(span * 0.055)));
+    const decelAdvance = protectIndex ? Math.max(10, Math.min(35, Math.round(overrun * 0.20))) : 0;
+    title = "② 균형 우선 · 7개 연동";
+    values = {
+      ...cur,
+      vstart: cur.vstart + 0.01,
+      vmax: cur.vmax + 0.02,
+      vmin: cur.vmin - 0.01,
+      accelSlope: cur.accelSlope * 1.015,
+      startDecel: cur.startDecel - decelAdvance,
+      startCreep: cur.startCreep + creepShift,
+      decelSlope: cur.decelSlope * 1.015,
+    };
+    characteristic = "7개 값을 가장 작은 폭으로 함께 움직여 시간 단축과 INDEX 직전 감속 여유를 동시에 확인하는 첫 시험안입니다.";
+    guard = "동일 조건에서 3사이클 이상 비교해 사이클시간과 INDEX OFF 후 이동이 모두 악화되지 않을 때만 다음 단계로 진행합니다.";
+    Object.assign(parameterReasons, {
+      vstart: "출발 응답 확인: +0.01 V",
+      vmax: "전체 시간 소폭 단축: +0.02 V",
+      vmin: "INDEX 직전 여유: −0.01 V",
+      accelSlope: "가속 구간 소폭 단축: +1.5%",
+      startDecel: decelAdvance ? `추가 이동 보정: ${decelAdvance} counts 앞당김` : "현재 감속 시작 위치 유지",
+      startCreep: `저속 CREEP 거리 소폭 축소: +${creepShift} counts`,
+      decelSlope: "감속 구배 소폭 보강: 절대값 +1.5%",
+    });
+  } else {
+    const decelAdvance = Math.max(30, Math.min(90, Math.round(Math.max(overrun, span * 0.08))));
+    const creepEarlier = Math.max(20, Math.min(55, Math.round(span * 0.05)));
+    title = "③ INDEX 안정 우선 · 7개 연동";
+    values = {
+      ...cur,
+      vstart: cur.vstart - 0.01,
+      vmax: cur.vmax - 0.02,
+      vmin: cur.vmin - 0.03,
+      accelSlope: cur.accelSlope * 0.98,
+      startDecel: cur.startDecel - decelAdvance,
+      startCreep: cur.startCreep - creepEarlier,
+      decelSlope: cur.decelSlope * 1.05,
+    };
+    characteristic = "INDEX 통과·정지 후 추가 이동을 줄이는 보수적 안입니다. 가속·최고속을 낮추고 감속 시작·CREEP 진입을 앞당깁니다.";
+    guard = "INDEX 미도달·저속 실속·사이클시간 과다 증가가 하나라도 생기면 즉시 기본값으로 복원합니다.";
+    Object.assign(parameterReasons, {
+      vstart: "출발 충격 여유: −0.01 V",
+      vmax: "INDEX 통과 여유: −0.02 V",
+      vmin: "INDEX 직전 저속 지령: −0.03 V",
+      accelSlope: "가속 충격 완화: −2%",
+      startDecel: `감속 거리 확보: ${decelAdvance} counts 앞당김`,
+      startCreep: `MIN 도달을 앞당기는 식 기준: −${creepEarlier} counts`,
+      decelSlope: "감속 구배 보강: 절대값 +5%",
+    });
+  }
+  return { title, characteristic, guard, values: normalizeAutoTuneValues(values), parameterReasons };
+}
+
 function recommendFromTrend(cur, metric) {
   const keepCandidateId = state.selectedCandidateId;
-  const span = Math.max(100, cur.startCreep - cur.startDecel);
   const creep = Math.round(metric.creepTravelCounts || 0);
-  const indexMove = Math.round(metric.indexOverrunCounts || 0);
+  const indexMove = Math.round(metric.indexOverrunCounts || metric.overrunCounts || 0);
   const evidence = `${metric.cycleCount}사이클 · 중앙 ${metric.medianCycleSec.toFixed(2)} s · CREEP→INDEX OFF ${creep} counts · INDEX OFF 후 ${indexMove} counts`;
-  const shiftFast = Math.max(50, Math.min(100, Math.round(span * 0.12)));
-  const shiftBalance = Math.max(30, Math.min(60, Math.round(span * 0.07)));
-  const time = (values) => `모델 ${estimateCycleSeconds(values).toFixed(2)} s · Trend 중앙 ${metric.medianCycleSec.toFixed(2)} s`;
-  const candidates = [
-    { id: "cycle", title: "① 사이클 단축 우선", values: { ...cur, startCreep: cur.startCreep + shiftFast }, evidence, characteristic: `START CREEP +${shiftFast}: CREEP 진입을 뒤로 옮겨 저속 이동거리를 줄입니다. INDEX SPEED MIN ${round(cur.vmin)} V는 유지합니다.`, guard: "INDEX OFF 후 추가 이동의 중앙·최대값이 현재보다 커지면 폐기" },
-    { id: "balance", title: "② 균형 우선", values: { ...cur, startCreep: cur.startCreep + shiftBalance }, evidence, characteristic: `START CREEP +${shiftBalance}: 작은 폭으로 사이클 시간을 줄이고 INDEX 직전 CREEP 전압은 유지합니다.`, guard: "사이클 중앙시간이 줄고 INDEX OFF 후 이동이 증가하지 않을 때만 다음 단계" },
-    { id: "index", title: "③ INDEX 통과 감소 우선", values: { ...cur, vmin: round(Math.max(0.1, cur.vmin - 0.03)) }, evidence, characteristic: `INDEX SPEED MIN ${round(cur.vmin)} → ${round(Math.max(0.1, cur.vmin - 0.03))} V: INDEX 직전 지령을 낮춰 추가 이동 감소를 확인합니다.`, guard: "저속 실속·INDEX 미도달이 없고 INDEX OFF 후 이동이 감소할 때만 유지" },
-  ].map((candidate) => ({ ...candidate, cycleEstimate: time(candidate.values) }));
+  const time = (values) => `후보 ${estimateCycleSeconds(values).toFixed(2)} s · Trend 중앙 ${metric.medianCycleSec.toFixed(2)} s`;
+  const candidates = ["cycle", "balance", "index"].map((kind) => {
+    const candidate = createAutoTuneScenario(cur, kind, metric);
+    return { id: kind, evidence, ...candidate, cycleEstimate: time(candidate.values) };
+  });
   state.candidates = candidates;
   renderTrendCandidate(candidates.find((candidate) => candidate.id === keepCandidateId) || candidates[0]);
 }
@@ -2913,17 +3036,17 @@ function recommend() {
 
 function recommendFromInputs(cur = readP()) {
   const keepCandidateId = state.selectedCandidateId;
-  const span = Math.max(100, cur.startCreep - cur.startDecel);
-  const fast = Math.max(50, Math.min(100, Math.round(span * 0.12)));
-  const balanced = Math.max(25, Math.min(55, Math.round(span * 0.06)));
   const baseline = estimateCycleSeconds(cur);
-  const estimate = (values) => `모델 ${estimateCycleSeconds(values).toFixed(2)} s · 현재 모델 ${baseline.toFixed(2)} s`;
   const evidence = "PLC Trend 미입력 · 현재 입력값과 SC2 감속식 기준";
-  state.candidates = [
-    { id: "cycle", title: "① 사이클 단축 우선", values: { ...cur, startCreep: cur.startCreep + fast }, evidence, characteristic: `START CREEP +${fast}: CREEP 이동을 줄이는 화면 시험안입니다.`, guard: "현장 적용 뒤 INDEX OFF 후 이동이 증가하면 즉시 기본값으로 복원", },
-    { id: "balance", title: "② 균형 우선", values: { ...cur, startCreep: cur.startCreep + balanced }, evidence, characteristic: `START CREEP +${balanced}: 가장 작은 변경폭으로 먼저 반응을 확인합니다.`, guard: "사이클 시간·INDEX OFF 후 이동을 같은 조건에서 비교", },
-    { id: "index", title: "③ INDEX 통과 감소 우선", values: { ...cur, vmin: round(Math.max(0.1, cur.vmin - 0.03)) }, evidence, characteristic: `INDEX SPEED MIN −0.03 V: INDEX 직전 저속 지령을 낮춘 보수적 시험안입니다.`, guard: "INDEX 센서 도달 실패 또는 저속 실속이 있으면 즉시 기본값으로 복원", },
-  ].map((candidate) => ({ ...candidate, cycleEstimate: estimate(candidate.values) }));
+  state.candidates = ["cycle", "balance", "index"].map((kind) => {
+    const candidate = createAutoTuneScenario(cur, kind);
+    return {
+      id: kind,
+      evidence,
+      ...candidate,
+      cycleEstimate: `후보 ${estimateCycleSeconds(candidate.values).toFixed(2)} s · 현재 모델 ${baseline.toFixed(2)} s`,
+    };
+  });
   renderTrendCandidate(state.candidates.find((candidate) => candidate.id === keepCandidateId) || state.candidates[0]);
 }
 
