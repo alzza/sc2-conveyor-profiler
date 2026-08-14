@@ -1232,7 +1232,7 @@
     <h1>SC2 · PARAMETER AUTO TUNE</h1>
     <span class="sub">PLC Trend 또는 현재값으로 만드는 조업자용 튜닝 시나리오</span>
     <span class="app-meta">
-      <span>v2.0.6</span>
+      <span>v2.0.7</span>
       <a href="mailto:b3101@lsmnm.com">b3101@lsmnm.com</a>
       <button type="button" id="btnChangelog">변경이력</button>
     </span>
@@ -1638,8 +1638,8 @@
   <section class="changelog" id="changelog" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle">변경이력</h3>
     <article>
-      <b>v2.0.0–v2.0.6 · 2026-08-14</b>
-      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 재생하고, 후보값은 구간별 실측 응답속도로 보정합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
+      <b>v2.0.0–v2.0.7 · 2026-08-14</b>
+      <p>페이지를 SC2 파라미터 오토튜닝 중심으로 개편했습니다. CSV 또는 현재값으로 3개 시나리오와 예상 시간을 만들고, 선택한 시나리오는 즉시 화면값·PC 그래프·고급 시뮬레이션에 반영됩니다. CSV가 있으면 현재 기준값은 대표 1사이클의 실제 시간·위치·구간을 재생하고, 후보값은 ACCEL/FULL/DECEL/CREEP별 실측 속도 곡선을 따라 제한적으로 보정합니다. 구간 데이터가 부족하면 후보 보정 대신 계산 모델을 사용합니다. 모바일 자동 튜닝 탭에서는 그래프를 숨기고, 고급 탭에서는 표시합니다. 값 연결 기능의 계산 기준과 FWD_REV_SPEED 표기를 정리했으며, 같은 버튼을 다시 눌러도 시나리오 값이 누적 계산되지 않습니다. PLC 자동 적용은 하지 않습니다.</p>
     </article>
     <article>
       <b>v1.4.0 · 2026-08-11</b>
@@ -1892,12 +1892,16 @@ function measuredResponseFromCycle(cycle) {
   if (trace.length < 3 || !(cycle.durationSec > 0)) return null;
   const rates = { ACCEL: [], FULL: [], DECEL: [], CREEP: [] };
   const volts = { ACCEL: [], FULL: [], DECEL: [], CREEP: [] };
+  const curves = { ACCEL: [], FULL: [], DECEL: [], CREEP: [] };
   for (let i = 1; i < trace.length; i++) {
     const before = trace[i - 1], after = trace[i];
     const seconds = (after.t - before.t) / 1000;
     const rate = (after.pos - before.pos) / seconds;
     const phase = tracePhase(after);
-    if (seconds > 0 && seconds <= 0.25 && Number.isFinite(rate) && rate > 1) rates[phase].push(rate);
+    if (seconds > 0 && seconds <= 0.25 && Number.isFinite(rate) && rate > 1) {
+      rates[phase].push(rate);
+      curves[phase].push({ rate, cmd: Math.abs(after.cmd) });
+    }
     if (Math.abs(after.cmd) > 0.05) volts[phase].push(Math.abs(after.cmd));
   }
   const fallbackRate = median(Object.values(rates).flat()) || 1;
@@ -1907,12 +1911,15 @@ function measuredResponseFromCycle(cycle) {
     durationSec: cycle.durationSec,
     rates: Object.fromEntries(Object.keys(rates).map((phase) => [phase, median(rates[phase]) || fallbackRate])),
     volts: Object.fromEntries(Object.keys(volts).map((phase) => [phase, median(volts[phase]) || fallbackVolt])),
+    curves,
+    adjustmentReady: Object.values(curves).filter((curve) => curve.length >= 5).length >= 3,
   };
 }
 
 function simulationModeFor(profile) {
   if (!state.measuredResponse) return "model";
-  return profilesEqual(profile, state.csvReferenceProfile) ? "measured" : "measured-adjusted";
+  if (profilesEqual(profile, state.csvReferenceProfile)) return "measured";
+  return state.measuredResponse.adjustmentReady ? "measured-adjusted" : "model";
 }
 
 function simulationModeLabel(mode = state.simMode) {
@@ -2379,8 +2386,10 @@ function drawGraph() {
       const detail = mode === "measured"
         ? "CSV 대표 1사이클의 실제 시간·위치·구간을 그대로 재생합니다."
         : mode === "measured-adjusted"
-          ? "CSV의 구간별 실제 응답속도를 기준으로 후보값의 가속·감속 시간을 보정합니다."
-          : "CSV가 없어 계산 모델로 재생합니다.";
+          ? "CSV의 ACCEL·FULL·DECEL·CREEP 속도 곡선을 따라 후보값의 구간 경계와 전압만 제한적으로 보정합니다."
+          : state.measuredResponse
+            ? "CSV에 후보 보정용 구간 데이터가 부족해 계산 모델로 재생합니다."
+            : "CSV가 없어 계산 모델로 재생합니다.";
       profileStatus.textContent = `${source} ${detail}`;
     }
     $("expertHelp").textContent =
@@ -2525,13 +2534,34 @@ function stopCycle(resetPos) {
   drawGraph();
 }
 
-/** 지령 전압(V) → 엔코더 증가량(counts/s). CSV가 있으면 구간별 실측 응답을 우선 사용한다. */
-function encoderRate(p, cmdV, phase = "FULL", response = state.measuredResponse) {
-  if (response && (state.simMode === "measured-adjusted" || !state.running)) {
-    const measuredRate = response.rates[phase] || response.rates.FULL;
-    const measuredVolt = Math.max(response.volts[phase] || response.volts.FULL, 0.1);
-    // 후보값의 전압 변화만 실측 구간 속도에 비례 보정한다. 과도한 외삽은 제한한다.
-    return measuredRate * Math.max(0.25, Math.min(1.8, Math.abs(cmdV) / measuredVolt));
+function phaseProgress(p, phase, pos) {
+  const logic = deriveProfileLogic(p);
+  const bounds = {
+    ACCEL: [0, logic.accelEnd],
+    FULL: [logic.accelEnd, logic.decelStart],
+    DECEL: [logic.decelStart, logic.hasCreepBeforeIndex ? logic.creepEnter : logic.stopPos],
+    CREEP: [logic.creepEnter, logic.stopPos],
+  }[phase] || [0, logic.stopPos];
+  return Math.max(0, Math.min(1, (pos - bounds[0]) / Math.max(1, bounds[1] - bounds[0])));
+}
+
+function responseRateAt(p, phase, pos, cmdV, response) {
+  const curve = response?.curves?.[phase];
+  if (!curve?.length) return NaN;
+  const progress = phaseProgress(p, phase, pos);
+  const index = Math.round(progress * (curve.length - 1));
+  const sample = curve[Math.max(0, Math.min(curve.length - 1, index))];
+  if (!(sample?.rate > 0)) return NaN;
+  // 후보의 지령 변화는 해당 구간 실측 곡선에 제한적으로만 반영한다.
+  const voltageRatio = Math.max(0.70, Math.min(1.30, Math.abs(cmdV) / Math.max(sample.cmd, 0.1)));
+  return sample.rate * voltageRatio;
+}
+
+/** 지령 전압(V) → 엔코더 증가량(counts/s). 후보는 CSV 구간별 속도 곡선을 재사용한다. */
+function encoderRate(p, cmdV, phase = "FULL", pos = 0, response = state.measuredResponse) {
+  if (response && (state.simMode === "measured-adjusted" || (!state.running && response.adjustmentReady))) {
+    const rate = responseRateAt(p, phase, pos, cmdV, response);
+    if (Number.isFinite(rate)) return rate;
   }
   const span = Math.max(p.startCreep, p.indexPos, p.target, p.xMax, 1000);
   // 1× 배속에서 대략 span 을 3~4초에 통과
@@ -2559,7 +2589,7 @@ function estimateCycleSeconds(p) {
       pos >= p.indexPos + Math.max(p.indexWidth, 1) * 0.5;
     if (finished && pos >= Math.min(p.startDecel, p.indexPos) * 0.5) return elapsed;
     const stopPos = deriveProfileLogic(p).stopPos;
-    pos = Math.min(pos + encoderRate(p, cmdV, phase) * dt, stopPos);
+    pos = Math.min(pos + encoderRate(p, cmdV, phase, pos) * dt, stopPos);
     elapsed += dt;
   }
   return NaN;
@@ -2660,7 +2690,7 @@ function stepSim(dt, renderNow = true) {
   }
 
   // ★ 핵심: 엔코더(ic_conveyor_position) 자동 증가
-  const dCounts = encoderRate(p, cmdV, phase) * dt * mul;
+  const dCounts = encoderRate(p, cmdV, phase, state.pos) * dt * mul;
   const stopPos = deriveProfileLogic(p).stopPos;
   state.pos = Math.min(state.pos + dCounts, stopPos);
   state.v = cmdV;
